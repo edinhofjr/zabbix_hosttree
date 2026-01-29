@@ -1,0 +1,14 @@
+{
+    "manifest_version": 2.0,
+    "id": "hosttree",
+    "name": "Host Tree",
+    "namespace": "HostTree",
+    "version": "1.0.0",
+    "author": "edinhofjr",
+    "actions": {
+        "hosttree.view": {
+            "class": "HostTreeController",
+            "view": "hosttree.view"
+        }
+    }
+}
