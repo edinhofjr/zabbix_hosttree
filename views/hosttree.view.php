@@ -1,5 +1,15 @@
 <?php
+/**
+ * @var CView $this
+ */
 
-$widget = (new CHtmlPage())->setTitle("Host Tree");
+$this->setLayoutMode(ZBX_LAYOUT_NORMAL);
 
-$widget->show();
+$page = (new CHtmlPage())
+    ->setTitle(_('Host TSree'));
+
+$form = new CPartial("module.monitoring.hosttree.view.html");
+
+$page->addItem($form);
+
+$page->show();
