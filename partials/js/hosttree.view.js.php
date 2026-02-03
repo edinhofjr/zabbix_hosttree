@@ -101,18 +101,35 @@
             }
         )
 
-    const append_tree = (node) => {
-        let $anchor = node.el;
+    const flatten_tree = (node, acc = []) => {
+        if (!node || !node.children) return acc;
 
         for (const childId of node.children) {
             const child = get_node(childId);
+            if (!child?.el) continue;
 
-            $anchor.after(child.el);
-            $anchor = child.el;
+            acc.push(child.el);
+            flatten_tree(child, acc);
+        }
 
-            append_tree(child);
+        return acc;
+    };
+
+    const append_tree = (node) => {
+        if (!node?.el || !node.children) return;
+
+        const rows = flatten_tree(node);
+
+        let $anchor = node.el;
+        for (const $row of rows) {
+            $anchor.after($row);
+            $anchor = $row;
         }
     };
+
+
+
+
 
     const toggle = (id) => {
         const node = get_node(id);
