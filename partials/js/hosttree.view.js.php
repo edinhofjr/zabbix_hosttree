@@ -172,31 +172,4 @@
             dataType: 'json'
         })
     }
-
-    function x() {
-        const $toggle = $(this);
-
-        var $id = $toggle.attr("node_id");
-
-        var $tr = $(`tr[node_id=${$id}]`);
-
-        $.ajax({
-            url: 'zabbix.php?action=hosttree.data&hostgroup_id=' + $id,
-            type: 'post',
-            dataType: 'json'
-        }).done((r) => {
-            console.log(r.body);
-
-            console.log(
-                r.body.map(v => v.items[0])
-            )
-            $(`tr[node_id=${$id}]`).after(
-                //r.body.map(v => v.items[0])
-                r.body.map(v => "<tr>" + v.items[0] + "</tr")
-            )
-        })
-
-        console.log($id);
-        //$tr.addClass('<?= ZBX_STYLE_DISPLAY_NONE ?>'); 
-    };
 </script>
