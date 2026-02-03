@@ -9,6 +9,11 @@
         "hosttree.view": {
             "class": "HostTreeController",
             "view": "hosttree.view"
+        },
+        "hosttree.data": {
+            "class": "HostTreeDataController",
+            "view": "hosttree.data",
+            "layout": "layout.json"
         }
     }
 }

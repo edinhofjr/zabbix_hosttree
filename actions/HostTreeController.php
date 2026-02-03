@@ -5,6 +5,7 @@ namespace Modules\HostTree\Actions;
 use CController;
 use CControllerResponseData;
 use CRoleHelper;
+use Modules\HostTree\Services\HostTreeAPIService;
 
 class HostTreeController extends CController {
     protected function init(): void {
@@ -20,9 +21,12 @@ class HostTreeController extends CController {
 	}
 
     protected function doAction() {
+        $hostGroups = HostTreeAPIService::getAllHostGroups();
+
         $this->setResponse(
             new CControllerResponseData(
-                ["status" => "success"]
+                ["status" => "success",
+                 "host_groups" => $hostGroups]
             )
         );
     }

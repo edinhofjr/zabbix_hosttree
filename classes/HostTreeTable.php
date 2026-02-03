@@ -24,8 +24,6 @@ class HostTreeTable extends CTableInfo {
             (new CColHeader(_('Web')))
         ]);
 
-        $this->addRow(
-            new HostTreeTableRow(true, 0, 'Parent host group')
-        );
+        $this->setAttribute("id", "host_tree");
     }
 }
