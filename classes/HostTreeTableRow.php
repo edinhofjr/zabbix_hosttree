@@ -6,12 +6,13 @@ use CRow;
 use CCol;
 use CSimpleButton;
 use CSpan;
+use CMenuPopupHelper;
+use CLinkAction;
 
 class HostTreeTableRow extends CRow {
-    public function __construct(bool $wrapper = false, int $level = 0, string $name, $id) {
+    public function __construct(bool $wrapper = false, int $level = 0, string $name, string $id, bool $popup = false) {
         parent::__construct();
 
-        $toogle_tag = ""; 
         if ($wrapper) {
             $toogle_tag = (new CSimpleButton())
                 ->addClass("wrapper-toggle")
@@ -27,7 +28,9 @@ class HostTreeTableRow extends CRow {
                 ->addItem(HTMLHelper::NBSP($level * 6))
                 ->addItem($toogle_tag)
                 ->addItem(HTMLHelper::NBSP(1))
-                ->addItem(bold($name))
+                ->addItem($popup ? 
+                    (new CLinkAction($name))->setMenuPopup(CMenuPopupHelper::getHost($id)) : 
+                bold($name))
         );
 
         $this->setAttribute("node_id", $id);

@@ -49,7 +49,8 @@ foreach ($hostTree as $groupName => $hosts) {
                 false,
                 2,
                 $hostData['name'],
-                $hostId
+                $hostData['hostid'],
+                true
             ))->toString(),
             'children' => []
         ];
