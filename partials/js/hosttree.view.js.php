@@ -50,7 +50,7 @@
         const node = get_node(id);
 
         if (
-            (!node.last_fetch || Date.now() - node.last_fetch > FIVE_MINUTES) &&
+            (!node.last_fetch /*|| Date.now() - node.last_fetch > FIVE_MINUTES*/) &&
             !is_virtual_id(id)
         ) {
             await fetch_hostgroups(id).done(r => {
