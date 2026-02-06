@@ -10,7 +10,7 @@ class Module extends \Zabbix\Core\CModule {
         APP::Component()->get('menu.main')
 			->findOrAdd(_('Monitoring'))
 				->getSubmenu()
-					->insertAfter('Hosts', (new \CMenuItem(_('HostTree')))
+					->insertAfter('Hosts', (new \CMenuItem(_('Host Tree')))
 						->setAction('hosttree.view')
 					);
     } 
