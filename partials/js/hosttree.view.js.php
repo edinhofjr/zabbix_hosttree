@@ -97,9 +97,24 @@
                     append_tree(node);
                 }
 
+                const span = $toggle.children("span")[0]
+                console.log(span.classList.contains('arrow-right'))
+
+                toggle_classes(span, "arrow-right", "arrow-down")
                 toggle(id);
             }
         )
+
+    const toggle_classes = (el, class1, class2) => {
+        classList = el.classList;
+        if (classList.contains(class1)) {
+            classList.remove(class1)
+            classList.add(class2)
+        } else {
+            classList.remove(class2)
+            classList.add(class1)
+        }
+    }
 
     const flatten_tree = (node, acc = []) => {
         if (!node || !node.children) return acc;
@@ -126,10 +141,6 @@
             $anchor = $row;
         }
     };
-
-
-
-
 
     const toggle = (id) => {
         const node = get_node(id);
