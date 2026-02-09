@@ -6,11 +6,26 @@
 ?>
 
 <script type="text/javascript">
+    const hostgroup = <?= json_encode($data) ?>;
     const host_tree = {};
     const host_tree_table = $("table#host_tree")[0];
-    const FIVE_MINUTES = 300000;
+    const host_tree_body = $(host_tree_table).find("tbody");
 
     const is_virtual_id = (id) => String(id).includes("_")
+
+    const init = () => {
+        console.log(hostgroup["html"])
+
+        if (!hostgroup["html"]) {
+            return
+        }
+
+        host_tree_body.children("tr").remove()
+        host_tree_body.append(hostgroup["html"])
+
+    }
+
+    init()
 
     const Node =
         (el, children, last_fetch, collapsed = true) => {
