@@ -23,14 +23,26 @@ class HostTreeController extends CController {
 
     protected function doAction() {
         $hostGroups = HostTreeAPIService::getAllHostGroups();
+        $hostGroupIds = array_map(static fn(array $hostGroup): string => (string) $hostGroup['groupid'], $hostGroups);
+        $hostGroupCounters = HostTreeAPIService::getHostCountsByHostGroupIds($hostGroupIds);
+        $hostGroupProblemCounters = HostTreeAPIService::getProblemCountsByHostGroupIdsBySeverity($hostGroupIds);
 
         $rows = [];
         foreach ($hostGroups as $hostGroup) {
+            $groupId = (string) $hostGroup["groupid"];
+            $groupName = sprintf(
+                '%s (%d)',
+                $hostGroup['name'],
+                $hostGroupCounters[$groupId] ?? 0
+            );
+
             $rows[] = (new HostTreeTableRow(
                 true,
                 0,
-                $hostGroup["name"],
-                $hostGroup["groupid"]
+                $groupName,
+                $groupId,
+                false,
+                $hostGroupProblemCounters[$groupId] ?? []
             ))->toString();
         }
 

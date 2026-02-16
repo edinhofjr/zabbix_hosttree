@@ -34,6 +34,15 @@ class HostTreeDataController extends CController
         $hostGroupIds = explode(",", $hostGroupIds);
 
         $hostTree = HostTreeAPIService::getHostTreeByHostGroupId($hostGroupIds);
+        $hostIds = [];
+
+        foreach ($hostTree as $hosts) {
+            foreach ($hosts as $hostData) {
+                $hostIds[] = (string) $hostData['hostid'];
+            }
+        }
+
+        $problemCountsByHostId = HostTreeAPIService::getProblemCountsByHostIdsBySeverity($hostIds);
 
         $tree = [];
         $hgacc = 0;
@@ -42,11 +51,19 @@ class HostTreeDataController extends CController
             ++$hgacc;
 
             $groupId = $hostGroupIds[0] . '_' . $hgacc;
+            $groupLabel = sprintf('%s (%d)', (string) $groupName, count($hosts));
             $children = [];
             $pacc = 1;
+            $groupProblemCount = $this->createEmptyProblemCounters();
 
             foreach ($hosts as $hostData) {
                 $hostId = $groupId . '_' . $pacc++;
+                $hostProblemCount = $problemCountsByHostId[(string) $hostData['hostid']]
+                    ?? $this->createEmptyProblemCounters();
+
+                foreach ($hostProblemCount as $severity => $problemCount) {
+                    $groupProblemCount[$severity] += $problemCount;
+                }
 
                 $children[] = [
                     'id' => $hostId,
@@ -55,7 +72,9 @@ class HostTreeDataController extends CController
                         2,
                         $hostData['name'],
                         $hostData['hostid'],
-                        true
+                        true,
+                        $hostProblemCount,
+                        (string) $hostData['hostid']
                     ))->toString(),
                     'children' => []
                 ];
@@ -66,8 +85,10 @@ class HostTreeDataController extends CController
                 'html' => (new HostTreeTableRow(
                     true,
                     1,
-                    $groupName,
-                    $groupId
+                    $groupLabel,
+                    $groupId,
+                    false,
+                    $groupProblemCount
                 ))->toString(),
                 'children' => $children
             ];
@@ -79,5 +100,16 @@ class HostTreeDataController extends CController
                 "hostgroup" => HostTreeAPIService::getAllHostGroups()
             ])
         );
+    }
+
+    private function createEmptyProblemCounters(): array
+    {
+        $problemCounters = [];
+
+        for ($severity = TRIGGER_SEVERITY_COUNT - 1; $severity >= TRIGGER_SEVERITY_NOT_CLASSIFIED; $severity--) {
+            $problemCounters[$severity] = 0;
+        }
+
+        return $problemCounters;
     }
 }
