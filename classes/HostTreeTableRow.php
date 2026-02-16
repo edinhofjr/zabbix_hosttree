@@ -65,10 +65,6 @@ class HostTreeTableRow extends CRow {
             );
         }
 
-        if (!$hasProblems) {
-            $problemsList->addItem('0');
-        }
-
         if ($problemsHostId !== null && $hasProblems) {
             $problemsCol->addItem(
                 (new CLink('', (new CUrl('zabbix.php'))
@@ -80,7 +76,7 @@ class HostTreeTableRow extends CRow {
                     ->addItem($problemsList)
             );
         }
-        else {
+        elseif ($hasProblems) {
             $problemsCol->addItem($problemsList);
         }
 
