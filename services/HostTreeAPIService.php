@@ -180,26 +180,18 @@ class HostTreeAPIService {
 
     public static function getHostTreeByHostGroupId($hostGroupId) {
         $hosts = self::getAllHostsByHostGroupId($hostGroupId);
-        $hostTree = [];
-        $otherHosts = [];
+        $hostTree = [
+            'Pontos' => [],
+            'Infra' => []
+        ];
 
         foreach ($hosts as $host) {
-            $bucket = self::getPontoBucket($host['tags']);
-
-            if ($bucket === null) {
-                $otherHosts[] = $host;
-                continue;
+            if (self::hasPontoTag($host['tags'])) {
+                $hostTree['Pontos'][] = $host;
             }
-
-            $hostTree[$bucket][] = $host;
-        }
-
-        if ($hostTree !== []) {
-            ksort($hostTree, SORT_NATURAL | SORT_FLAG_CASE);
-        }
-
-        if ($otherHosts !== []) {
-            $hostTree['outros'] = $otherHosts;
+            else {
+                $hostTree['Infra'][] = $host;
+            }
         }
 
         return $hostTree;
@@ -225,19 +217,15 @@ class HostTreeAPIService {
 			]);
     }
 
-    private static function getPontoBucket(array $tags): ?string {
+    private static function hasPontoTag(array $tags): bool {
         foreach ($tags as $tag) {
             if (($tag['tag'] ?? '') !== 'ponto') {
                 continue;
             }
 
-            $value = trim((string) ($tag['value'] ?? ''));
-
-            if ($value !== '') {
-                return $value;
-            }
+            return true;
         }
 
-        return null;
+        return false;
     }
 }

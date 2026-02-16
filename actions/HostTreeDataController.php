@@ -83,7 +83,7 @@ class HostTreeDataController extends CController
             $tree[] = [
                 'id' => $groupId,
                 'html' => (new HostTreeTableRow(
-                    true,
+                    $hosts !== [],
                     1,
                     $groupLabel,
                     $groupId,
