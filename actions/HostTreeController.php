@@ -2,6 +2,7 @@
 
 namespace Modules\HostTree\Actions;
 
+use CCsrfTokenHelper;
 use CController;
 use CControllerResponseData;
 use CRoleHelper;
@@ -14,7 +15,12 @@ class HostTreeController extends CController {
 	}
 
     protected function checkInput(): bool {
-        return true;
+        $fields = [
+            'groupids' => 'array_id',
+            'filter_reset' => 'in 1'
+        ];
+
+        return $this->validateInput($fields);
     }
 
     protected function checkPermissions(): bool {
@@ -23,12 +29,35 @@ class HostTreeController extends CController {
 
     protected function doAction() {
         $hostGroups = HostTreeAPIService::getAllHostGroups();
-        $hostGroupIds = array_map(static fn(array $hostGroup): string => (string) $hostGroup['groupid'], $hostGroups);
+        $selectedGroupIds = [];
+
+        if (!$this->hasInput('filter_reset')) {
+            $inputGroupIds = $this->getInput('groupids', []);
+
+            if (is_array($inputGroupIds)) {
+                foreach ($inputGroupIds as $groupId) {
+                    $groupId = (string) $groupId;
+
+                    if (!ctype_digit($groupId)) {
+                        continue;
+                    }
+
+                    $selectedGroupIds[] = $groupId;
+                }
+
+                $selectedGroupIds = array_values(array_unique($selectedGroupIds));
+            }
+        }
+
+        $filteredHostGroups = $this->filterHostGroupsByIds($hostGroups, $selectedGroupIds);
+        $groupsMultiselect = $this->buildGroupsMultiselectData($hostGroups, $selectedGroupIds);
+
+        $hostGroupIds = array_map(static fn(array $hostGroup): string => (string) $hostGroup['groupid'], $filteredHostGroups);
         $hostGroupCounters = HostTreeAPIService::getHostCountsByHostGroupIds($hostGroupIds);
         $hostGroupProblemCounters = HostTreeAPIService::getProblemCountsByHostGroupIdsBySeverity($hostGroupIds);
 
         $rows = [];
-        foreach ($hostGroups as $hostGroup) {
+        foreach ($filteredHostGroups as $hostGroup) {
             $groupId = (string) $hostGroup["groupid"];
             $groupName = sprintf(
                 '%s (%d)',
@@ -46,13 +75,88 @@ class HostTreeController extends CController {
             ))->toString();
         }
 
+        $filterTab = [
+            'filter_name' => '',
+            'groupids' => $selectedGroupIds,
+            'filter_show_counter' => 0,
+            'filter_custom_time' => 0,
+            'filter_view_data' => [
+                'groups_multiselect' => $groupsMultiselect
+            ]
+        ];
+        $filterTab['filter_src'] = $filterTab;
+
         $this->setResponse(
             new CControllerResponseData(
                 [
-                    "status" => "success",
-                    "html" => $rows
+                    'status' => 'success',
+                    'html' => $rows,
+                    'filter_view' => 'module.monitoring.hosttree.filter',
+                    'filter_defaults' => [
+                        'filter_name' => '',
+                        'groupids' => [],
+                        'filter_show_counter' => 0,
+                        'filter_custom_time' => 0,
+                        'filter_view_data' => [
+                            'groups_multiselect' => []
+                        ]
+                    ],
+                    'filter_tabs' => [$filterTab],
+                    'tabfilter_options' => [
+                        'idx' => 'web.monitoring.hosttree.filter',
+                        'selected' => 0,
+                        'support_custom_time' => 0,
+                        'expanded' => true,
+                        'page' => 1,
+                        'csrf_token' => CCsrfTokenHelper::get('tabfilter')
+                    ]
                 ]
             )
         );
+    }
+
+    private function filterHostGroupsByIds(array $hostGroups, array $selectedGroupIds): array {
+        if ($selectedGroupIds === []) {
+            return $hostGroups;
+        }
+
+        $selectedLookup = array_flip($selectedGroupIds);
+        $filtered = [];
+
+        foreach ($hostGroups as $hostGroup) {
+            $groupId = (string) $hostGroup['groupid'];
+
+            if (!array_key_exists($groupId, $selectedLookup)) {
+                continue;
+            }
+
+            $filtered[] = $hostGroup;
+        }
+
+        return $filtered;
+    }
+
+    private function buildGroupsMultiselectData(array $hostGroups, array $selectedGroupIds): array {
+        if ($selectedGroupIds === []) {
+            return [];
+        }
+
+        $selectedLookup = array_flip($selectedGroupIds);
+        $groupsMultiselect = [];
+
+        foreach ($hostGroups as $hostGroup) {
+            $groupId = (string) $hostGroup['groupid'];
+
+            if (!array_key_exists($groupId, $selectedLookup)) {
+                continue;
+            }
+
+            $groupsMultiselect[] = [
+                'id' => $groupId,
+                'name' => $hostGroup['name']
+            ];
+        }
+
+        return $groupsMultiselect;
     }
 }

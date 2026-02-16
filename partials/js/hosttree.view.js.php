@@ -13,6 +13,20 @@
 
     const is_virtual_id = (id) => String(id).includes("_")
 
+    const init_tab_filter = () => {
+        if (!hostgroup["filter_options"]) {
+            return;
+        }
+
+        const filterElement = $("#monitoring_hosttree_filter")[0];
+
+        if (!filterElement) {
+            return;
+        }
+
+        new CTabFilter(filterElement, hostgroup["filter_options"]);
+    }
+
     const init = () => {
         console.log(hostgroup["html"])
 
@@ -25,6 +39,7 @@
 
     }
 
+    init_tab_filter()
     init()
 
     const Node =
@@ -121,7 +136,7 @@
         )
 
     const toggle_classes = (el, class1, class2) => {
-        classList = el.classList;
+        const classList = el.classList;
         if (classList.contains(class1)) {
             classList.remove(class1)
             classList.add(class2)
