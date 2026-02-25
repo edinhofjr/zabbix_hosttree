@@ -8,9 +8,13 @@
     const safeBootstrap = bootstrap;
     const payload = bootstrap.payload;
     const ui = bootstrap.ui;
+    if (payload.profile_debug !== undefined) {
+        console.debug('[hosttree] profile_debug', payload.profile_debug);
+    }
     const severityMeta = payload.severity_meta ?? {};
     const severityOrder = Object.keys(severityMeta).sort((left, right) => Number(right) - Number(left));
     const nodeStateById = new Map();
+    const POINT_BUCKET_PAGE_SIZE = 30;
     const table = document.querySelector('table#host_tree');
     const tableBody = table?.querySelector('tbody') ?? null;
     if (!table || !tableBody) {
@@ -21,6 +25,26 @@
     renderInitialNodes(payload.nodes);
     table.addEventListener('click', async (event) => {
         const eventTarget = event.target;
+        const paginationButton = eventTarget?.closest('button[data-hosttree-page]');
+        if (paginationButton) {
+            event.preventDefault();
+            const nodeId = paginationButton.getAttribute('node_id');
+            const direction = paginationButton.getAttribute('data-hosttree-page');
+            if (!nodeId || !direction) {
+                return;
+            }
+            const nodeState = nodeStateById.get(nodeId);
+            if (!nodeState || !nodeState.pagination || nodeState.collapsed) {
+                return;
+            }
+            if (direction === 'prev') {
+                changePaginationPage(nodeState, nodeState.pagination.page - 1);
+            }
+            else if (direction === 'next') {
+                changePaginationPage(nodeState, nodeState.pagination.page + 1);
+            }
+            return;
+        }
         const toggleButton = eventTarget?.closest('.wrapper-toggle');
         if (!toggleButton) {
             return;
@@ -71,14 +95,16 @@
             rootTableBody.appendChild(nodeState.element);
         }
     }
-    function registerNodeTree(node, hidden) {
+    function registerNodeTree(node, hidden, parentId = null, inPointsSubtree = false) {
         const existingState = nodeStateById.get(node.id);
         if (existingState) {
             return existingState;
         }
+        const isPointsRoot = (node.level === 1 && /^Pontos\b/i.test(node.label));
+        const isInPointsSubtree = inPointsSubtree || isPointsRoot;
         const childIds = [];
         for (const childNode of node.children) {
-            const childState = registerNodeTree(childNode, true);
+            const childState = registerNodeTree(childNode, true, node.id, isInPointsSubtree);
             childIds.push(childState.data.id);
         }
         const stateData = {
@@ -97,12 +123,27 @@
             element: buildRowElement(stateData, hidden),
             childrenIds: childIds,
             loaded: node.needs_load ? false : true,
-            collapsed: true
+            collapsed: true,
+            parentId,
+            inPointsSubtree: isInPointsSubtree,
+            pagination: null
         };
         if (childIds.length > 0) {
             nodeState.loaded = true;
         }
+        if (isPointBucketNode(nodeState) && childIds.length > POINT_BUCKET_PAGE_SIZE) {
+            nodeState.pagination = {
+                page: 1,
+                pageSize: POINT_BUCKET_PAGE_SIZE,
+                total: childIds.length,
+                totalPages: Math.ceil(childIds.length / POINT_BUCKET_PAGE_SIZE),
+                prevButton: null,
+                nextButton: null,
+                infoElement: null
+            };
+        }
         nodeStateById.set(node.id, nodeState);
+        attachPaginationControls(nodeState);
         return nodeState;
     }
     function buildRowElement(node, hidden) {
@@ -150,6 +191,93 @@
         const text = document.createElement('b');
         text.textContent = node.label;
         return text;
+    }
+    function isPointBucketNode(nodeState) {
+        return nodeState.inPointsSubtree
+            && nodeState.data.level === 2
+            && nodeState.childrenIds.length > 0;
+    }
+    function attachPaginationControls(nodeState) {
+        if (!nodeState.pagination) {
+            return;
+        }
+        const firstCell = nodeState.element.querySelector('td');
+        if (!firstCell) {
+            return;
+        }
+        const controls = document.createElement('span');
+        controls.classList.add(ui.nowrap_class);
+        controls.style.marginLeft = '10px';
+        controls.style.display = 'inline-flex';
+        controls.style.alignItems = 'center';
+        controls.style.gap = '4px';
+        const prevButton = document.createElement('button');
+        prevButton.type = 'button';
+        prevButton.setAttribute('node_id', nodeState.data.id);
+        prevButton.setAttribute('data-hosttree-page', 'prev');
+        prevButton.textContent = '<';
+        prevButton.disabled = true;
+        const nextButton = document.createElement('button');
+        nextButton.type = 'button';
+        nextButton.setAttribute('node_id', nodeState.data.id);
+        nextButton.setAttribute('data-hosttree-page', 'next');
+        nextButton.textContent = '>';
+        const info = document.createElement('span');
+        info.style.minWidth = '42px';
+        info.style.textAlign = 'center';
+        controls.appendChild(prevButton);
+        controls.appendChild(info);
+        controls.appendChild(nextButton);
+        firstCell.appendChild(controls);
+        nodeState.pagination.prevButton = prevButton;
+        nodeState.pagination.nextButton = nextButton;
+        nodeState.pagination.infoElement = info;
+        updatePaginationControls(nodeState);
+    }
+    function updatePaginationControls(nodeState) {
+        const pagination = nodeState.pagination;
+        if (!pagination) {
+            return;
+        }
+        if (pagination.infoElement) {
+            pagination.infoElement.textContent = `${pagination.page}/${pagination.totalPages}`;
+        }
+        if (pagination.prevButton) {
+            pagination.prevButton.disabled = pagination.page <= 1;
+        }
+        if (pagination.nextButton) {
+            pagination.nextButton.disabled = pagination.page >= pagination.totalPages;
+        }
+    }
+    function changePaginationPage(nodeState, nextPage) {
+        const pagination = nodeState.pagination;
+        if (!pagination) {
+            return;
+        }
+        const clampedPage = Math.max(1, Math.min(pagination.totalPages, nextPage));
+        if (clampedPage === pagination.page) {
+            return;
+        }
+        pagination.page = clampedPage;
+        applyPaginationVisibility(nodeState);
+        updatePaginationControls(nodeState);
+    }
+    function applyPaginationVisibility(nodeState) {
+        const pagination = nodeState.pagination;
+        if (!pagination) {
+            return;
+        }
+        const start = (pagination.page - 1) * pagination.pageSize;
+        const end = start + pagination.pageSize;
+        for (let index = 0; index < nodeState.childrenIds.length; index++) {
+            const childId = nodeState.childrenIds[index];
+            const childState = nodeStateById.get(childId);
+            if (!childState) {
+                continue;
+            }
+            const isVisible = (index >= start && index < end);
+            childState.element.classList.toggle(ui.display_none_class, !isVisible);
+        }
     }
     function buildProblemsColumn(node) {
         const problemsColumn = document.createElement('td');
@@ -235,6 +363,8 @@
             }
             childState.element.classList.remove(ui.display_none_class);
         }
+        applyPaginationVisibility(nodeState);
+        updatePaginationControls(nodeState);
         nodeState.collapsed = false;
     }
     function collapseNode(nodeState) {

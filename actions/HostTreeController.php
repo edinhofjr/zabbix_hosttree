@@ -6,6 +6,7 @@ use CCsrfTokenHelper;
 use CController;
 use CControllerResponseData;
 use CRoleHelper;
+use Modules\HostTree\Classes\CProfileExample;
 use Modules\HostTree\Classes\HostTreeNodeFactory;
 use Modules\HostTree\Services\HostTreeAPIService;
 
@@ -17,7 +18,8 @@ class HostTreeController extends CController {
     protected function checkInput(): bool {
         $fields = [
             'groupids' => 'array_id',
-            'filter_reset' => 'in 1'
+            'filter_reset' => 'in 1',
+            'debug_profile' => 'in 1'
         ];
 
         return $this->validateInput($fields);
@@ -29,25 +31,23 @@ class HostTreeController extends CController {
 
     protected function doAction() {
         $hostGroups = HostTreeAPIService::getAllHostGroups();
-        $selectedGroupIds = [];
+        $profileState = CProfileExample::getState();
+        $selectedGroupIds = $profileState['groupids'];
 
-        if (!$this->hasInput('filter_reset')) {
-            $inputGroupIds = $this->getInput('groupids', []);
-
-            if (is_array($inputGroupIds)) {
-                foreach ($inputGroupIds as $groupId) {
-                    $groupId = (string) $groupId;
-
-                    if (!ctype_digit($groupId)) {
-                        continue;
-                    }
-
-                    $selectedGroupIds[] = $groupId;
-                }
-
-                $selectedGroupIds = array_values(array_unique($selectedGroupIds));
-            }
+        if ($this->hasInput('filter_reset')) {
+            CProfileExample::resetState();
+            $profileState = CProfileExample::getState();
+            $selectedGroupIds = $profileState['groupids'];
         }
+        elseif ($this->hasInput('groupids')) {
+            $selectedGroupIds = $this->sanitizeGroupIds($this->getInput('groupids', []));
+            $profileState['groupids'] = $selectedGroupIds;
+            CProfileExample::saveState($profileState);
+        }
+
+        $profileDebug = $this->hasInput('debug_profile')
+            ? CProfileExample::getDebugData($this->getInputAll())
+            : null;
 
         $filteredHostGroups = $this->filterHostGroupsByIds($hostGroups, $selectedGroupIds);
         $groupsMultiselect = $this->buildGroupsMultiselectData($hostGroups, $selectedGroupIds);
@@ -93,34 +93,36 @@ class HostTreeController extends CController {
         ];
         $filterTab['filter_src'] = $filterTab;
 
-        $this->setResponse(
-            new CControllerResponseData(
-                [
-                    'status' => 'success',
-                    'nodes' => $nodes,
-                    'severity_meta' => HostTreeNodeFactory::createSeverityMeta(),
-                    'filter_view' => 'module.monitoring.hosttree.filter',
-                    'filter_defaults' => [
-                        'filter_name' => '',
-                        'groupids' => [],
-                        'filter_show_counter' => 0,
-                        'filter_custom_time' => 0,
-                        'filter_view_data' => [
-                            'groups_multiselect' => []
-                        ]
-                    ],
-                    'filter_tabs' => [$filterTab],
-                    'tabfilter_options' => [
-                        'idx' => 'web.monitoring.hosttree.filter',
-                        'selected' => 0,
-                        'support_custom_time' => 0,
-                        'expanded' => true,
-                        'page' => 1,
-                        'csrf_token' => CCsrfTokenHelper::get('tabfilter')
-                    ]
+        $responseData = [
+            'status' => 'success',
+            'nodes' => $nodes,
+            'severity_meta' => HostTreeNodeFactory::createSeverityMeta(),
+            'filter_view' => 'module.monitoring.hosttree.filter',
+            'filter_defaults' => [
+                'filter_name' => '',
+                'groupids' => [],
+                'filter_show_counter' => 0,
+                'filter_custom_time' => 0,
+                'filter_view_data' => [
+                    'groups_multiselect' => []
                 ]
-            )
-        );
+            ],
+            'filter_tabs' => [$filterTab],
+            'tabfilter_options' => [
+                'idx' => 'web.monitoring.hosttree.filter',
+                'selected' => 0,
+                'support_custom_time' => 0,
+                'expanded' => true,
+                'page' => 1,
+                'csrf_token' => CCsrfTokenHelper::get('tabfilter')
+            ]
+        ];
+
+        if ($profileDebug !== null) {
+            $responseData['profile_debug'] = $profileDebug;
+        }
+
+        $this->setResponse(new CControllerResponseData($responseData));
     }
 
     private function filterHostGroupsByIds(array $hostGroups, array $selectedGroupIds): array {
@@ -166,5 +168,25 @@ class HostTreeController extends CController {
         }
 
         return $groupsMultiselect;
+    }
+
+    private function sanitizeGroupIds($groupIds): array {
+        if (!is_array($groupIds)) {
+            return [];
+        }
+
+        $sanitizedGroupIds = [];
+
+        foreach ($groupIds as $groupId) {
+            $groupId = (string) $groupId;
+
+            if (!ctype_digit($groupId)) {
+                continue;
+            }
+
+            $sanitizedGroupIds[$groupId] = true;
+        }
+
+        return array_keys($sanitizedGroupIds);
     }
 }

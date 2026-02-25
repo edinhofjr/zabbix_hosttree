@@ -57,6 +57,12 @@ class HostTreeDataController extends CController
         $problemCountsByHostId = HostTreeAPIService::getProblemCountsByHostIdsBySeverity($hostIds);
 
         $tree = [];
+        $pointNodes = [];
+        $pointHostCount = 0;
+        $pointProblemCount = HostTreeNodeFactory::createEmptyProblemCounters();
+        $infraNodes = [];
+        $infraHostCount = 0;
+        $infraProblemCount = HostTreeNodeFactory::createEmptyProblemCounters();
         $hgacc = 0;
         $parentId = $hostGroupIds[0];
 
@@ -67,17 +73,39 @@ class HostTreeDataController extends CController
 
             ++$hgacc;
 
+            $isOtherGroup = ((string) $groupName === 'outros');
             $groupId = $parentId.'_'.$hgacc;
-            $groupLabel = sprintf('%s (%d)', (string) $groupName, count($hosts));
             $children = [];
             $pacc = 1;
             $groupProblemCount = HostTreeNodeFactory::createEmptyProblemCounters();
 
             foreach ($hosts as $hostData) {
-                $hostId = $groupId.'_'.$pacc++;
                 $sourceHostId = (string) $hostData['hostid'];
                 $hostProblemCount = $problemCountsByHostId[(string) $hostData['hostid']]
                     ?? HostTreeNodeFactory::createEmptyProblemCounters();
+
+                if ($isOtherGroup) {
+                    $infraNodes[] = HostTreeNodeFactory::createNode(
+                        $parentId.'_infra_'.$pacc++,
+                        (string) $hostData['name'],
+                        2,
+                        false,
+                        false,
+                        true,
+                        $hostProblemCount,
+                        $sourceHostId,
+                        CMenuPopupHelper::getHost($sourceHostId)
+                    );
+                    ++$infraHostCount;
+
+                    foreach ($hostProblemCount as $severity => $problemCount) {
+                        $infraProblemCount[$severity] += $problemCount;
+                    }
+
+                    continue;
+                }
+
+                $hostId = $groupId.'_'.$pacc++;
 
                 foreach ($hostProblemCount as $severity => $problemCount) {
                     $groupProblemCount[$severity] += $problemCount;
@@ -86,7 +114,7 @@ class HostTreeDataController extends CController
                 $children[] = HostTreeNodeFactory::createNode(
                     $hostId,
                     (string) $hostData['name'],
-                    2,
+                    3,
                     false,
                     false,
                     true,
@@ -96,10 +124,14 @@ class HostTreeDataController extends CController
                 );
             }
 
-            $tree[] = HostTreeNodeFactory::createNode(
+            if ($isOtherGroup) {
+                continue;
+            }
+
+            $groupNode = HostTreeNodeFactory::createNode(
                 $groupId,
-                $groupLabel,
-                1,
+                sprintf('%s (%d)', (string) $groupName, count($hosts)),
+                2,
                 $hosts !== [],
                 false,
                 false,
@@ -107,6 +139,46 @@ class HostTreeDataController extends CController
                 null,
                 null,
                 $children
+            );
+
+            $pointNodes[] = $groupNode;
+            $pointHostCount += count($hosts);
+
+            foreach ($groupProblemCount as $severity => $problemCount) {
+                $pointProblemCount[$severity] += $problemCount;
+            }
+        }
+
+        if ($pointNodes !== []) {
+            array_unshift(
+                $tree,
+                HostTreeNodeFactory::createNode(
+                    $parentId.'_pontos',
+                    sprintf('Pontos (%d)', $pointHostCount),
+                    1,
+                    true,
+                    false,
+                    false,
+                    $pointProblemCount,
+                    null,
+                    null,
+                    $pointNodes
+                )
+            );
+        }
+
+        if ($infraNodes !== []) {
+            $tree[] = HostTreeNodeFactory::createNode(
+                $parentId.'_infra',
+                sprintf('Infra (%d)', $infraHostCount),
+                1,
+                true,
+                false,
+                false,
+                $infraProblemCount,
+                null,
+                null,
+                $infraNodes
             );
         }
 
