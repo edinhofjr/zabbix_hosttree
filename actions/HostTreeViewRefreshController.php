@@ -5,7 +5,7 @@ namespace Modules\HostTree\Actions;
 use CController;
 use CControllerResponseData;
 use CRoleHelper;
-use Modules\HostTree\Classes\HostTreeTableRow;
+use Modules\HostTree\Classes\HostTreeNodeFactory;
 use Modules\HostTree\Services\HostTreeAPIService;
 
 class HostTreeViewRefreshController extends CController {
@@ -48,30 +48,29 @@ class HostTreeViewRefreshController extends CController {
 
         foreach ($filteredHostGroups as $hostGroup) {
             $groupId = (string) $hostGroup['groupid'];
+            $hostCount = (int) ($hostGroupCounters[$groupId] ?? 0);
             $groupName = sprintf(
                 '%s (%d)',
                 $hostGroup['name'],
-                $hostGroupCounters[$groupId] ?? 0
+                $hostCount
             );
 
-            $tree[] = [
-                'id' => $groupId,
-                'html' => (new HostTreeTableRow(
-                    true,
-                    0,
-                    $groupName,
-                    $groupId,
-                    false,
-                    $hostGroupProblemCounters[$groupId] ?? []
-                ))->toString(),
-                'children' => []
-            ];
+            $tree[] = HostTreeNodeFactory::createNode(
+                $groupId,
+                $groupName,
+                0,
+                $hostCount > 0,
+                true,
+                false,
+                $hostGroupProblemCounters[$groupId] ?? []
+            );
         }
 
         $this->setResponse(
             new CControllerResponseData([
                 'status' => 'success',
-                'data' => $tree
+                'data' => $tree,
+                'severity_meta' => HostTreeNodeFactory::createSeverityMeta()
                 ])
         );
     }

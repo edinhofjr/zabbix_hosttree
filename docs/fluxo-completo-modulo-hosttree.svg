@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1280" viewBox="0 0 1900 1280">
+  <defs>
+    <style>
+      .title { font: 700 32px Arial, sans-serif; fill: #1a1a1a; }
+      .lane-title { font: 700 22px Arial, sans-serif; fill: #1a1a1a; }
+      .box-title { font: 700 17px Arial, sans-serif; fill: #1a1a1a; }
+      .box-text { font: 14px Arial, sans-serif; fill: #1a1a1a; }
+      .small { font: 12px Arial, sans-serif; fill: #333; }
+      .arrow-label { font: 12px Arial, sans-serif; fill: #222; }
+      .lane-ui { fill: #f3f8ff; stroke: #4f7fbf; stroke-width: 2; }
+      .lane-controller { fill: #fff7ef; stroke: #cf8a47; stroke-width: 2; }
+      .lane-service { fill: #f6f4ff; stroke: #6f5bb4; stroke-width: 2; }
+      .box { fill: #ffffff; stroke: #444; stroke-width: 1.4; rx: 10; ry: 10; }
+      .box-dashed { fill: #ffffff; stroke: #444; stroke-width: 1.4; stroke-dasharray: 8 6; rx: 10; ry: 10; }
+      .note { fill: #fffde7; stroke: #b7a800; stroke-width: 1.2; rx: 8; ry: 8; }
+      .legend { fill: #f9f9f9; stroke: #999; stroke-width: 1; rx: 8; ry: 8; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+  </defs>
+
+  <text class="title" x="950" y="42" text-anchor="middle">Fluxo completo do modulo Host Tree (Zabbix)</text>
+
+  <rect class="lane-ui" x="20" y="70" width="580" height="1180"/>
+  <rect class="lane-controller" x="640" y="70" width="580" height="1180"/>
+  <rect class="lane-service" x="1260" y="70" width="620" height="1180"/>
+
+  <text class="lane-title" x="310" y="106" text-anchor="middle">UI / Views / JS</text>
+  <text class="lane-title" x="930" y="106" text-anchor="middle">Actions (Controllers)</text>
+  <text class="lane-title" x="1570" y="106" text-anchor="middle">Service / API / Render helpers</text>
+
+  <rect class="box" x="60" y="130" width="500" height="86"/>
+  <text class="box-title" x="76" y="156">1) Menu entry</text>
+  <text class="box-text" x="76" y="178">`Module.php::init()` adiciona "Monitoring -&gt; Host Tree"</text>
+  <text class="box-text" x="76" y="198">acao: `hosttree.view`</text>
+
+  <rect class="box" x="60" y="250" width="500" height="90"/>
+  <text class="box-title" x="76" y="277">2) Requisicao inicial</text>
+  <text class="box-text" x="76" y="300">Navegador chama `zabbix.php?action=hosttree.view`</text>
+  <text class="box-text" x="76" y="320">(com `groupids[]` quando filtro aplicado)</text>
+
+  <rect class="box" x="60" y="374" width="500" height="126"/>
+  <text class="box-title" x="76" y="402">3) Render da pagina</text>
+  <text class="box-text" x="76" y="425">`views/hosttree.view.php` monta:</text>
+  <text class="box-text" x="76" y="447">- `CTabFilter` + tab options</text>
+  <text class="box-text" x="76" y="469">- partial `module.monitoring.hosttree.view.html`</text>
+  <text class="box-text" x="76" y="491">- linhas de grupo em `html[]` vindas do controller</text>
+
+  <rect class="box" x="60" y="536" width="500" height="134"/>
+  <text class="box-title" x="76" y="564">4) Filtro (tabfilter)</text>
+  <text class="box-text" x="76" y="587">Partial `module.monitoring.hosttree.filter.php`</text>
+  <text class="box-text" x="76" y="609">JS escuta `filter_apply`/`filter_update`</text>
+  <text class="box-text" x="76" y="631">e redireciona para `action=hosttree.view`</text>
+  <text class="box-text" x="76" y="653">(refresh completo da pagina)</text>
+
+  <rect class="box" x="60" y="700" width="500" height="134"/>
+  <text class="box-title" x="76" y="728">5) Tabela e JS da arvore</text>
+  <text class="box-text" x="76" y="751">Partial `module.monitoring.hosttree.view.html.php`</text>
+  <text class="box-text" x="76" y="773">renderiza `HostTreeTable` e inclui `hosttree.view.js.php`</text>
+  <text class="box-text" x="76" y="795">JS inicializa tabfilter e injeta `hostgroup["html"]`</text>
+  <text class="box-text" x="76" y="817">no `tbody#host_tree`</text>
+
+  <rect class="box" x="60" y="870" width="500" height="114"/>
+  <text class="box-title" x="76" y="898">6) Expansao sob demanda</text>
+  <text class="box-text" x="76" y="921">Clique em `.wrapper-toggle` -&gt; `fetch_hostgroups(id)`</text>
+  <text class="box-text" x="76" y="943">AJAX POST `action=hosttree.data&amp;hostgroup_id={id}`</text>
+  <text class="box-text" x="76" y="965">carrega nivel 1 e hosts de forma lazy</text>
+
+  <rect class="box" x="60" y="1018" width="500" height="118"/>
+  <text class="box-title" x="76" y="1046">7) Render incremental da arvore</text>
+  <text class="box-text" x="76" y="1069">Resposta JSON com `data[]` (groups + hosts + html)</text>
+  <text class="box-text" x="76" y="1091">JS atualiza cache `host_tree`, usa `append_tree` e `toggle`</text>
+  <text class="box-text" x="76" y="1113">sem recarregar a pagina inteira</text>
+
+  <rect class="box" x="680" y="220" width="500" height="210"/>
+  <text class="box-title" x="696" y="248">A) `HostTreeController::doAction` (action `hosttree.view`)</text>
+  <text class="box-text" x="696" y="271">- valida entrada: `groupids`, `filter_reset`</text>
+  <text class="box-text" x="696" y="293">- busca host groups e sanitiza selecao</text>
+  <text class="box-text" x="696" y="315">- calcula contadores de hosts e problemas por severidade</text>
+  <text class="box-text" x="696" y="337">- cria `rows[]` com `HostTreeTableRow` (nivel 0)</text>
+  <text class="box-text" x="696" y="359">- devolve `CControllerResponseData` com html + filtros</text>
+  <text class="box-text" x="696" y="381">  para `views/hosttree.view.php`</text>
+
+  <rect class="box" x="680" y="860" width="500" height="232"/>
+  <text class="box-title" x="696" y="888">B) `HostTreeDataController::doAction` (action `hosttree.data`)</text>
+  <text class="box-text" x="696" y="911">- recebe `hostgroup_id` (string CSV)</text>
+  <text class="box-text" x="696" y="933">- usa service para montar host tree (Pontos / Infra)</text>
+  <text class="box-text" x="696" y="955">- coleta hostids e calcula problemas por severidade</text>
+  <text class="box-text" x="696" y="977">- monta nos virtuais (`groupId_index`) e filhos hosts</text>
+  <text class="box-text" x="696" y="999">- cada no vem com `html` via `HostTreeTableRow`</text>
+  <text class="box-text" x="696" y="1021">- responde JSON: `{status, data, hostgroup}`</text>
+  <text class="box-text" x="696" y="1043">  renderizado em `views/hosttree.data.php`</text>
+
+  <rect class="box-dashed" x="680" y="1120" width="500" height="112"/>
+  <text class="box-title" x="696" y="1148">C) `HostTreeViewRefreshController::doAction`</text>
+  <text class="box-text" x="696" y="1171">Implementa fluxo de refresh de grupos (JSON `data`)</text>
+  <text class="box-text" x="696" y="1193">mas nao ha action declarada no `manifest.json` atual.</text>
+  <text class="box-text" x="696" y="1215">Logo, nao participa do fluxo ativo hoje.</text>
+
+  <rect class="box" x="1300" y="220" width="540" height="230"/>
+  <text class="box-title" x="1316" y="248">S1) `HostTreeAPIService` (fluxo `hosttree.view`)</text>
+  <text class="box-text" x="1316" y="271">- `getAllHostGroups()`</text>
+  <text class="box-text" x="1316" y="293">- `getHostCountsByHostGroupIds(groupids)`</text>
+  <text class="box-text" x="1316" y="315">- `getProblemCountsByHostGroupIdsBySeverity(groupids)`</text>
+  <text class="box-text" x="1316" y="337">- internamente usa hosts + triggers + problems</text>
+  <text class="box-text" x="1316" y="359">  para compor counters por severidade</text>
+  <text class="box-text" x="1316" y="381">- retorna arrays indexados por `groupid`</text>
+
+  <rect class="box" x="1300" y="500" width="540" height="130"/>
+  <text class="box-title" x="1316" y="528">S2) APIs do Zabbix consumidas</text>
+  <text class="box-text" x="1316" y="551">`API::HostGroup()->get`, `API::Host()->get`</text>
+  <text class="box-text" x="1316" y="573">`API::Trigger()->get`, `API::Problem()->get`</text>
+  <text class="box-text" x="1316" y="595">dados brutos para contagem e arvore de hosts</text>
+
+  <rect class="box" x="1300" y="680" width="540" height="150"/>
+  <text class="box-title" x="1316" y="708">S3) Helpers de render</text>
+  <text class="box-text" x="1316" y="731">`HostTreeTable` cria estrutura da tabela (`id=host_tree`)</text>
+  <text class="box-text" x="1316" y="753">`HostTreeTableRow` gera HTML de cada no com:</text>
+  <text class="box-text" x="1316" y="775">toggle, label, link popup de host e badges de severidade</text>
+  <text class="box-text" x="1316" y="797">usado tanto no fluxo inicial quanto no AJAX lazy</text>
+
+  <rect class="box" x="1300" y="900" width="540" height="194"/>
+  <text class="box-title" x="1316" y="928">S4) `HostTreeAPIService` (fluxo `hosttree.data`)</text>
+  <text class="box-text" x="1316" y="951">- `getHostTreeByHostGroupId(hostgroup_id)`</text>
+  <text class="box-text" x="1316" y="973">  particiona hosts por tag `ponto` -&gt; "Pontos"/"Infra"</text>
+  <text class="box-text" x="1316" y="995">- `getProblemCountsByHostIdsBySeverity(hostids)`</text>
+  <text class="box-text" x="1316" y="1017">- `getAllHostGroups()` incluido na resposta JSON</text>
+  <text class="box-text" x="1316" y="1039">resultado final para montar filhos e contadores agregados</text>
+
+  <rect class="note" x="1300" y="1120" width="540" height="112"/>
+  <text class="box-title" x="1316" y="1148">Observacao de cobertura</text>
+  <text class="box-text" x="1316" y="1171">`manifest.json` registra apenas `hosttree.view` e `hosttree.data`.</text>
+  <text class="box-text" x="1316" y="1193">Qualquer endpoint de refresh extra precisa ser adicionado ali.</text>
+  <text class="box-text" x="1316" y="1215">Se nao, o fluxo ativo permanece nestes dois caminhos.</text>
+
+  <line x1="310" y1="216" x2="310" y2="248" stroke="#2d2d2d" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="560" y1="292" x2="680" y2="292" stroke="#2d2d2d" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="584" y="282">HTTP GET</text>
+
+  <line x1="1180" y1="292" x2="1300" y2="292" stroke="#2d2d2d" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="1201" y="282">service calls</text>
+
+  <line x1="1570" y1="450" x2="1570" y2="500" stroke="#2d2d2d" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="1582" y="478">API::*</text>
+
+  <line x1="1300" y1="730" x2="1180" y2="730" stroke="#2d2d2d" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="1204" y="720">rows html</text>
+
+  <line x1="680" y1="402" x2="560" y2="402" stroke="#2d2d2d" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="586" y="392">CControllerResponseData</text>
+
+  <line x1="310" y1="500" x2="310" y2="536" stroke="#2d2d2d" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="310" y1="670" x2="310" y2="700" stroke="#2d2d2d" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="310" y1="834" x2="310" y2="870" stroke="#2d2d2d" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <path d="M 560 610 C 620 610, 620 292, 680 292" fill="none" stroke="#2d2d2d" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="590" y="468">filter_apply/filter_update</text>
+
+  <line x1="560" y1="926" x2="680" y2="926" stroke="#2d2d2d" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="570" y="916">AJAX POST hosttree.data</text>
+
+  <line x1="1180" y1="950" x2="1300" y2="950" stroke="#2d2d2d" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="1201" y="940">service calls</text>
+
+  <path d="M 1570 900 C 1625 900, 1625 630, 1570 630" fill="none" stroke="#2d2d2d" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="1633" y="760">Host/Trigger/Problem</text>
+
+  <line x1="1300" y1="770" x2="1180" y2="1020" stroke="#2d2d2d" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="1196" y="908">row html</text>
+
+  <line x1="680" y1="1020" x2="560" y2="1068" stroke="#2d2d2d" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text class="arrow-label" x="574" y="1042">JSON {data[]}</text>
+
+  <rect class="legend" x="60" y="1154" width="500" height="78"/>
+  <text class="box-title" x="76" y="1180">Legenda rapida</text>
+  <text class="small" x="76" y="1200">Linha continua: fluxo ativo no modulo. Caixa tracejada: fluxo implementado, mas nao conectado.</text>
+  <text class="small" x="76" y="1218">Fluxo principal: menu -&gt; hosttree.view. Fluxo lazy: click toggle -&gt; hosttree.data.</text>
+</svg>

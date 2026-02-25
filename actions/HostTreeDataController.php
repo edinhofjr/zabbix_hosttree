@@ -4,7 +4,9 @@ namespace Modules\HostTree\Actions;
 
 use CController;
 use CControllerResponseData;
-use Modules\HostTree\Classes\HostTreeTableRow;
+use CMenuPopupHelper;
+use CRoleHelper;
+use Modules\HostTree\Classes\HostTreeNodeFactory;
 use Modules\HostTree\Services\HostTreeAPIService;
 
 class HostTreeDataController extends CController
@@ -25,13 +27,23 @@ class HostTreeDataController extends CController
 
     protected function checkPermissions(): bool
     {
-        return true;
+        return $this->checkAccess(CRoleHelper::UI_MONITORING_HOSTS);
     }
 
     protected function doAction()
     {
-        $hostGroupIds = $this->getInput("hostgroup_id", null);
-        $hostGroupIds = explode(",", $hostGroupIds);
+        $hostGroupIds = $this->parseHostGroupIds((string) $this->getInput('hostgroup_id', ''));
+
+        if ($hostGroupIds === []) {
+            $this->setResponse(
+                new CControllerResponseData([
+                    'status' => 'ok',
+                    'data' => []
+                ])
+            );
+
+            return;
+        }
 
         $hostTree = HostTreeAPIService::getHostTreeByHostGroupId($hostGroupIds);
         $hostIds = [];
@@ -46,70 +58,81 @@ class HostTreeDataController extends CController
 
         $tree = [];
         $hgacc = 0;
+        $parentId = $hostGroupIds[0];
 
         foreach ($hostTree as $groupName => $hosts) {
             ++$hgacc;
 
-            $groupId = $hostGroupIds[0] . '_' . $hgacc;
+            $groupId = $parentId.'_'.$hgacc;
             $groupLabel = sprintf('%s (%d)', (string) $groupName, count($hosts));
             $children = [];
             $pacc = 1;
-            $groupProblemCount = $this->createEmptyProblemCounters();
+            $groupProblemCount = HostTreeNodeFactory::createEmptyProblemCounters();
 
             foreach ($hosts as $hostData) {
-                $hostId = $groupId . '_' . $pacc++;
+                $hostId = $groupId.'_'.$pacc++;
+                $sourceHostId = (string) $hostData['hostid'];
                 $hostProblemCount = $problemCountsByHostId[(string) $hostData['hostid']]
-                    ?? $this->createEmptyProblemCounters();
+                    ?? HostTreeNodeFactory::createEmptyProblemCounters();
 
                 foreach ($hostProblemCount as $severity => $problemCount) {
                     $groupProblemCount[$severity] += $problemCount;
                 }
 
-                $children[] = [
-                    'id' => $hostId,
-                    'html' => (new HostTreeTableRow(
-                        false,
-                        2,
-                        $hostData['name'],
-                        $hostData['hostid'],
-                        true,
-                        $hostProblemCount,
-                        (string) $hostData['hostid']
-                    ))->toString(),
-                    'children' => []
-                ];
+                $children[] = HostTreeNodeFactory::createNode(
+                    $hostId,
+                    (string) $hostData['name'],
+                    2,
+                    false,
+                    false,
+                    true,
+                    $hostProblemCount,
+                    $sourceHostId,
+                    CMenuPopupHelper::getHost($sourceHostId)
+                );
             }
 
-            $tree[] = [
-                'id' => $groupId,
-                'html' => (new HostTreeTableRow(
-                    $hosts !== [],
-                    1,
-                    $groupLabel,
-                    $groupId,
-                    false,
-                    $groupProblemCount
-                ))->toString(),
-                'children' => $children
-            ];
+            $tree[] = HostTreeNodeFactory::createNode(
+                $groupId,
+                $groupLabel,
+                1,
+                $hosts !== [],
+                false,
+                false,
+                $groupProblemCount,
+                null,
+                null,
+                $children
+            );
         }
+
         $this->setResponse(
             new CControllerResponseData([
-                "status" => "ok",
-                "data" => $tree,
-                "hostgroup" => HostTreeAPIService::getAllHostGroups()
+                'status' => 'ok',
+                'data' => $tree
             ])
         );
     }
 
-    private function createEmptyProblemCounters(): array
+    private function parseHostGroupIds(string $hostGroupIds): array
     {
-        $problemCounters = [];
-
-        for ($severity = TRIGGER_SEVERITY_COUNT - 1; $severity >= TRIGGER_SEVERITY_NOT_CLASSIFIED; $severity--) {
-            $problemCounters[$severity] = 0;
+        if ($hostGroupIds === '') {
+            return [];
         }
 
-        return $problemCounters;
+        $validatedHostGroupIds = [];
+        $hostGroupIds = explode(',', $hostGroupIds);
+
+        foreach ($hostGroupIds as $hostGroupId) {
+            $hostGroupId = trim((string) $hostGroupId);
+
+            if (!ctype_digit($hostGroupId)) {
+                continue;
+            }
+
+            $validatedHostGroupIds[$hostGroupId] = true;
+        }
+
+        return array_keys($validatedHostGroupIds);
     }
 }

@@ -6,7 +6,7 @@ use CCsrfTokenHelper;
 use CController;
 use CControllerResponseData;
 use CRoleHelper;
-use Modules\HostTree\Classes\HostTreeTableRow;
+use Modules\HostTree\Classes\HostTreeNodeFactory;
 use Modules\HostTree\Services\HostTreeAPIService;
 
 class HostTreeController extends CController {
@@ -56,23 +56,25 @@ class HostTreeController extends CController {
         $hostGroupCounters = HostTreeAPIService::getHostCountsByHostGroupIds($hostGroupIds);
         $hostGroupProblemCounters = HostTreeAPIService::getProblemCountsByHostGroupIdsBySeverity($hostGroupIds);
 
-        $rows = [];
+        $nodes = [];
         foreach ($filteredHostGroups as $hostGroup) {
-            $groupId = (string) $hostGroup["groupid"];
+            $groupId = (string) $hostGroup['groupid'];
+            $hostCount = (int) ($hostGroupCounters[$groupId] ?? 0);
             $groupName = sprintf(
                 '%s (%d)',
                 $hostGroup['name'],
-                $hostGroupCounters[$groupId] ?? 0
+                $hostCount
             );
 
-            $rows[] = (new HostTreeTableRow(
-                true,
-                0,
-                $groupName,
+            $nodes[] = HostTreeNodeFactory::createNode(
                 $groupId,
+                $groupName,
+                0,
+                $hostCount > 0,
+                true,
                 false,
                 $hostGroupProblemCounters[$groupId] ?? []
-            ))->toString();
+            );
         }
 
         $filterTab = [
@@ -90,7 +92,8 @@ class HostTreeController extends CController {
             new CControllerResponseData(
                 [
                     'status' => 'success',
-                    'html' => $rows,
+                    'nodes' => $nodes,
+                    'severity_meta' => HostTreeNodeFactory::createSeverityMeta(),
                     'filter_view' => 'module.monitoring.hosttree.filter',
                     'filter_defaults' => [
                         'filter_name' => '',
