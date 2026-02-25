@@ -61,6 +61,10 @@ class HostTreeDataController extends CController
         $parentId = $hostGroupIds[0];
 
         foreach ($hostTree as $groupName => $hosts) {
+            if ($hosts === []) {
+                continue;
+            }
+
             ++$hgacc;
 
             $groupId = $parentId.'_'.$hgacc;

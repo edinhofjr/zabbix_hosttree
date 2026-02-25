@@ -49,6 +49,11 @@ class HostTreeViewRefreshController extends CController {
         foreach ($filteredHostGroups as $hostGroup) {
             $groupId = (string) $hostGroup['groupid'];
             $hostCount = (int) ($hostGroupCounters[$groupId] ?? 0);
+
+            if ($hostCount === 0) {
+                continue;
+            }
+
             $groupName = sprintf(
                 '%s (%d)',
                 $hostGroup['name'],
