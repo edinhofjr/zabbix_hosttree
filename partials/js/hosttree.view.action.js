@@ -116,7 +116,9 @@
             popup: node.popup,
             problem_host_id: node.problem_host_id,
             menu_popup: node.menu_popup,
-            problem_counts_by_severity: node.problem_counts_by_severity
+            problem_counts_by_severity: (childIds.length > 0)
+                ? aggregateProblemCountersByChildIds(childIds)
+                : node.problem_counts_by_severity
         };
         const nodeState = {
             data: stateData,
@@ -319,6 +321,62 @@
         problemsColumn.appendChild(problemList);
         return problemsColumn;
     }
+    function createProblemCounterSeed() {
+        const seed = {};
+        if (severityOrder.length > 0) {
+            for (const severity of severityOrder) {
+                seed[severity] = 0;
+            }
+        }
+        return seed;
+    }
+    function aggregateProblemCountersByChildIds(childIds) {
+        const counters = createProblemCounterSeed();
+        for (const childId of childIds) {
+            const childState = nodeStateById.get(childId);
+            if (!childState) {
+                continue;
+            }
+            for (const [severity, rawProblemCount] of Object.entries(childState.data.problem_counts_by_severity)) {
+                const problemCount = Number(rawProblemCount);
+                if (!Number.isFinite(problemCount) || problemCount <= 0) {
+                    if (!Object.prototype.hasOwnProperty.call(counters, severity)) {
+                        counters[severity] = 0;
+                    }
+                    continue;
+                }
+                counters[severity] = (counters[severity] ?? 0) + problemCount;
+            }
+        }
+        return counters;
+    }
+    function refreshProblemsColumn(nodeState) {
+        const nextProblemsColumn = buildProblemsColumn(nodeState.data);
+        const currentProblemsColumn = nodeState.element.children.item(1);
+        if (currentProblemsColumn) {
+            nodeState.element.replaceChild(nextProblemsColumn, currentProblemsColumn);
+            return;
+        }
+        nodeState.element.appendChild(nextProblemsColumn);
+    }
+    function recalculateNodeProblemCountersFromChildren(nodeState) {
+        if (nodeState.childrenIds.length === 0) {
+            return;
+        }
+        nodeState.data.problem_counts_by_severity = aggregateProblemCountersByChildIds(nodeState.childrenIds);
+        refreshProblemsColumn(nodeState);
+    }
+    function refreshAncestorProblemCounters(nodeState) {
+        let ancestorId = nodeState.parentId;
+        while (ancestorId) {
+            const ancestorState = nodeStateById.get(ancestorId);
+            if (!ancestorState) {
+                break;
+            }
+            recalculateNodeProblemCountersFromChildren(ancestorState);
+            ancestorId = ancestorState.parentId;
+        }
+    }
     function buildProblemViewUrl(hostId) {
         const params = new URLSearchParams();
         params.set('action', 'problem.view');
@@ -338,6 +396,8 @@
         }
         nodeState.childrenIds = childIds;
         nodeState.loaded = true;
+        recalculateNodeProblemCountersFromChildren(nodeState);
+        refreshAncestorProblemCounters(nodeState);
     }
     function fetchChildNodes(nodeId) {
         return new Promise((resolve, reject) => {
