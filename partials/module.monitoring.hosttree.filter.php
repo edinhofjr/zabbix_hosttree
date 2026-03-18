@@ -36,7 +36,7 @@ $filter_fields = (new CFormGrid())
         )
     ]);
 
-$template = (new CForm('get'))
+$template = (new CForm('post'))
     ->setName('zbx_filter')
     ->addItem([
         (new CDiv())
@@ -98,6 +98,8 @@ if (array_key_exists('render_html', $data)) {
 			return;
 		}
 
+		ev.stopImmediatePropagation();
+
 		const params = this.getFilterParams(false);
 
 		if (!(params instanceof URLSearchParams)) {
@@ -107,10 +109,20 @@ if (array_key_exists('render_html', $data)) {
 		params.set('action', 'hosttree.view');
 		params.delete('page');
 
-		const url = new Curl('zabbix.php');
-		url.query = params.toString();
-		url.formatArguments();
-		window.location.href = url.getUrl();
+		const form = document.createElement('form');
+		form.method = 'post';
+		form.action = 'zabbix.php';
+
+		for (const [key, value] of params.entries()) {
+			const input = document.createElement('input');
+			input.type = 'hidden';
+			input.name = key;
+			input.value = value;
+			form.appendChild(input);
+		}
+
+		document.body.appendChild(form);
+		form.submit();
 	}
 
 	template.addEventListener(TABFILTERITEM_EVENT_RENDER, function(ev) {

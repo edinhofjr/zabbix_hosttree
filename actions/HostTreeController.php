@@ -12,24 +12,24 @@ use Modules\HostTree\Services\HostTreeAPIService;
 
 class HostTreeController extends CController {
     protected function init(): void {
-		$this->disableCsrfValidation();
-	}
+        $this->disableCsrfValidation();
+    }
 
     protected function checkInput(): bool {
         $fields = [
             'groupids' => 'array_id',
             'filter_reset' => 'in 1',
-            'debug_profile' => 'in 1'
+            'debug_profile' => 'in 1',
         ];
 
         return $this->validateInput($fields);
     }
 
     protected function checkPermissions(): bool {
-		return $this->checkAccess(CRoleHelper::UI_MONITORING_HOSTS);
-	}
+        return $this->checkAccess(CRoleHelper::UI_MONITORING_HOSTS);
+    }
 
-    protected function doAction() {
+    protected function doAction(): void {
         $hostGroups = HostTreeAPIService::getAllHostGroups();
         $profileState = CProfileExample::getState();
         $selectedGroupIds = $profileState['groupids'];
@@ -53,10 +53,12 @@ class HostTreeController extends CController {
         $groupsMultiselect = $this->buildGroupsMultiselectData($hostGroups, $selectedGroupIds);
 
         $hostGroupIds = array_map(static fn(array $hostGroup): string => (string) $hostGroup['groupid'], $filteredHostGroups);
-        $hostGroupCounters = HostTreeAPIService::getHostCountsByHostGroupIds($hostGroupIds);
-        $hostGroupProblemCounters = HostTreeAPIService::getProblemCountsByHostGroupIdsBySeverity($hostGroupIds);
+        $hostData = HostTreeAPIService::getHostCountsAndProblemsByHostGroupIds($hostGroupIds);
+        $hostGroupCounters = $hostData['counts'];
+        $hostGroupProblemCounters = $hostData['problems'];
 
         $nodes = [];
+
         foreach ($filteredHostGroups as $hostGroup) {
             $groupId = (string) $hostGroup['groupid'];
             $hostCount = (int) ($hostGroupCounters[$groupId] ?? 0);
@@ -65,20 +67,20 @@ class HostTreeController extends CController {
                 continue;
             }
 
-            $groupName = sprintf(
-                '%s (%d)',
-                $hostGroup['name'],
-                $hostCount
-            );
+            $groupName = sprintf('%s (%d)', $hostGroup['name'], $hostCount);
 
             $nodes[] = HostTreeNodeFactory::createNode(
                 $groupId,
                 $groupName,
                 0,
-                $hostCount > 0,
+                true,
                 true,
                 false,
-                $hostGroupProblemCounters[$groupId] ?? []
+                $hostGroupProblemCounters[$groupId] ?? [],
+                null,
+                null,
+                [],
+                'group'
             );
         }
 
@@ -88,14 +90,15 @@ class HostTreeController extends CController {
             'filter_show_counter' => 0,
             'filter_custom_time' => 0,
             'filter_view_data' => [
-                'groups_multiselect' => $groupsMultiselect
-            ]
+                'groups_multiselect' => $groupsMultiselect,
+            ],
         ];
         $filterTab['filter_src'] = $filterTab;
 
         $responseData = [
             'status' => 'success',
             'nodes' => $nodes,
+            'selected_group_ids' => $selectedGroupIds,
             'severity_meta' => HostTreeNodeFactory::createSeverityMeta(),
             'filter_view' => 'module.monitoring.hosttree.filter',
             'filter_defaults' => [
@@ -104,8 +107,8 @@ class HostTreeController extends CController {
                 'filter_show_counter' => 0,
                 'filter_custom_time' => 0,
                 'filter_view_data' => [
-                    'groups_multiselect' => []
-                ]
+                    'groups_multiselect' => [],
+                ],
             ],
             'filter_tabs' => [$filterTab],
             'tabfilter_options' => [
@@ -114,8 +117,8 @@ class HostTreeController extends CController {
                 'support_custom_time' => 0,
                 'expanded' => true,
                 'page' => 1,
-                'csrf_token' => CCsrfTokenHelper::get('tabfilter')
-            ]
+                'csrf_token' => CCsrfTokenHelper::get('tabfilter'),
+            ],
         ];
 
         if ($profileDebug !== null) {
@@ -163,18 +166,14 @@ class HostTreeController extends CController {
 
             $groupsMultiselect[] = [
                 'id' => $groupId,
-                'name' => $hostGroup['name']
+                'name' => $hostGroup['name'],
             ];
         }
 
         return $groupsMultiselect;
     }
 
-    private function sanitizeGroupIds($groupIds): array {
-        if (!is_array($groupIds)) {
-            return [];
-        }
-
+    private function sanitizeGroupIds(array $groupIds): array {
         $sanitizedGroupIds = [];
 
         foreach ($groupIds as $groupId) {

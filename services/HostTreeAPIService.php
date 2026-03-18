@@ -5,51 +5,76 @@ namespace Modules\HostTree\Services;
 use API;
 
 class HostTreeAPIService {
-    public static function getAllHostGroups() {
+    public const OUTROS_BUCKET = 'outros';
+
+    public static function getAllHostGroups(): array {
         return API::HostGroup()->get([
-				'output' => ['groupid', 'name'],
-				'sortfield' => 'name',
-			]);
+            'output' => ['groupid', 'name'],
+            'sortfield' => 'name',
+        ]);
     }
 
-    public static function getHostCountsByHostGroupIds(array $hostGroupIds): array {
+    /**
+     * Fetches host counts and problem counts per host group in a single host API call.
+     *
+     * @return array{counts: array<string,int>, problems: array<string,array<int,int>>}
+     */
+    public static function getHostCountsAndProblemsByHostGroupIds(array $hostGroupIds): array {
+        $empty = ['counts' => [], 'problems' => []];
+
         if ($hostGroupIds === []) {
-            return [];
+            return $empty;
         }
 
         $hostGroupIds = array_values(array_unique(array_map('strval', $hostGroupIds)));
         $countByGroupId = array_fill_keys($hostGroupIds, 0);
+        $problemsByGroupId = [];
+
+        foreach ($hostGroupIds as $id) {
+            $problemsByGroupId[$id] = self::createEmptyProblemCounters();
+        }
 
         $hosts = API::Host()->get([
             'output' => ['hostid'],
             'groupids' => $hostGroupIds,
-            'selectHostGroups' => ['groupid']
+            'selectHostGroups' => ['groupid'],
+            'preservekeys' => true,
         ]);
+
+        if ($hosts === []) {
+            return ['counts' => $countByGroupId, 'problems' => $problemsByGroupId];
+        }
 
         foreach ($hosts as $host) {
             foreach ($host['hostgroups'] as $hostgroup) {
                 $groupid = (string) $hostgroup['groupid'];
 
-                if (!array_key_exists($groupid, $countByGroupId)) {
-                    continue;
+                if (array_key_exists($groupid, $countByGroupId)) {
+                    $countByGroupId[$groupid]++;
                 }
-
-                $countByGroupId[$groupid]++;
             }
         }
 
-        return $countByGroupId;
-    }
+        $hostProblemCounts = self::getProblemCountsByHostIdsBySeverity(array_keys($hosts));
 
-    public static function getProblemCountsByHostIds(array $hostIds): array {
-        $problemCountsByHostIdBySeverity = self::getProblemCountsByHostIdsBySeverity($hostIds);
-        $problemCountsByHostId = [];
+        foreach ($hosts as $host) {
+            $hostId = (string) $host['hostid'];
+            $problemCountsBySeverity = $hostProblemCounts[$hostId] ?? self::createEmptyProblemCounters();
 
-        foreach ($problemCountsByHostIdBySeverity as $hostId => $problemCountsBySeverity) {
-            $problemCountsByHostId[$hostId] = array_sum($problemCountsBySeverity);
+            foreach ($host['hostgroups'] as $hostgroup) {
+                $groupId = (string) $hostgroup['groupid'];
+
+                if (!array_key_exists($groupId, $problemsByGroupId)) {
+                    continue;
+                }
+
+                foreach ($problemCountsBySeverity as $severity => $problemCount) {
+                    $problemsByGroupId[$groupId][$severity] += $problemCount;
+                }
+            }
         }
 
-        return $problemCountsByHostId;
+        return ['counts' => $countByGroupId, 'problems' => $problemsByGroupId];
     }
 
     public static function getProblemCountsByHostIdsBySeverity(array $hostIds): array {
@@ -70,7 +95,7 @@ class HostTreeAPIService {
             'hostids' => $hostIds,
             'skipDependent' => true,
             'monitored' => true,
-            'preservekeys' => true
+            'preservekeys' => true,
         ]);
 
         if ($triggers === []) {
@@ -82,7 +107,7 @@ class HostTreeAPIService {
             'source' => EVENT_SOURCE_TRIGGERS,
             'object' => EVENT_OBJECT_TRIGGER,
             'objectids' => array_keys($triggers),
-            'symptom' => false
+            'symptom' => false,
         ]);
 
         foreach ($problems as $problem) {
@@ -112,73 +137,7 @@ class HostTreeAPIService {
         return $countByHostId;
     }
 
-    public static function getProblemCountsByHostGroupIds(array $hostGroupIds): array {
-        $problemCountsByHostGroupIdBySeverity = self::getProblemCountsByHostGroupIdsBySeverity($hostGroupIds);
-        $problemCountsByHostGroupId = [];
-
-        foreach ($problemCountsByHostGroupIdBySeverity as $groupId => $problemCountsBySeverity) {
-            $problemCountsByHostGroupId[$groupId] = array_sum($problemCountsBySeverity);
-        }
-
-        return $problemCountsByHostGroupId;
-    }
-
-    public static function getProblemCountsByHostGroupIdsBySeverity(array $hostGroupIds): array {
-        if ($hostGroupIds === []) {
-            return [];
-        }
-
-        $hostGroupIds = array_values(array_unique(array_map('strval', $hostGroupIds)));
-        $countByGroupId = [];
-
-        foreach ($hostGroupIds as $hostGroupId) {
-            $countByGroupId[$hostGroupId] = self::createEmptyProblemCounters();
-        }
-
-        $hosts = API::Host()->get([
-            'output' => ['hostid'],
-            'groupids' => $hostGroupIds,
-            'selectHostGroups' => ['groupid'],
-            'preservekeys' => true
-        ]);
-
-        if ($hosts === []) {
-            return $countByGroupId;
-        }
-
-        $hostProblemCounts = self::getProblemCountsByHostIdsBySeverity(array_keys($hosts));
-
-        foreach ($hosts as $host) {
-            $hostId = (string) $host['hostid'];
-            $problemCountsBySeverity = $hostProblemCounts[$hostId] ?? self::createEmptyProblemCounters();
-
-            foreach ($host['hostgroups'] as $hostgroup) {
-                $groupId = (string) $hostgroup['groupid'];
-
-                if (!array_key_exists($groupId, $countByGroupId)) {
-                    continue;
-                }
-
-                foreach ($problemCountsBySeverity as $severity => $problemCount) {
-                    $countByGroupId[$groupId][$severity] += $problemCount;
-                }
-            }
-        }
-
-        return $countByGroupId;
-    }
-
-    private static function createEmptyProblemCounters(): array {
-        $problemCounters = [];
-
-        for ($severity = TRIGGER_SEVERITY_COUNT - 1; $severity >= TRIGGER_SEVERITY_NOT_CLASSIFIED; $severity--) {
-            $problemCounters[$severity] = 0;
-        }
-
-        return $problemCounters;
-    }
-
-    public static function getHostTreeByHostGroupId($hostGroupId) {
+    public static function getHostTreeByHostGroupId(array $hostGroupId): array {
         $hosts = self::getAllHostsByHostGroupId($hostGroupId);
         $hostTree = [];
         $otherHosts = [];
@@ -199,30 +158,19 @@ class HostTreeAPIService {
         }
 
         if ($otherHosts !== []) {
-            $hostTree['outros'] = $otherHosts;
+            $hostTree[self::OUTROS_BUCKET] = $otherHosts;
         }
 
         return $hostTree;
     }
 
-    public static function hasTag($key, $value, $tagArray) {
-        foreach( $tagArray as $tag) {
-
-        }
-    }
-
-    public static function getTag($key, $tagArray) {
-        foreach($tagArray as $tag) {
-
-        }
-    }
-
-    public static function getAllHostsByHostGroupId($hostGroupId) {
+    public static function getAllHostsByHostGroupId(array $hostGroupId): array {
         return API::Host()->get([
-				'output' => ['hostid', 'name'],
-				'selectTags' => ['tag', 'value'],	
-				'groupids' => $hostGroupId,
-			]);
+            'output' => ['hostid', 'name'],
+            'selectTags' => ['tag', 'value'],
+            'groupids' => $hostGroupId,
+            'sortfield' => 'name',
+        ]);
     }
 
     private static function getPontoBucket(array $tags): ?string {
@@ -239,5 +187,15 @@ class HostTreeAPIService {
         }
 
         return null;
+    }
+
+    private static function createEmptyProblemCounters(): array {
+        $problemCounters = [];
+
+        for ($severity = TRIGGER_SEVERITY_COUNT - 1; $severity >= TRIGGER_SEVERITY_NOT_CLASSIFIED; $severity--) {
+            $problemCounters[$severity] = 0;
+        }
+
+        return $problemCounters;
     }
 }

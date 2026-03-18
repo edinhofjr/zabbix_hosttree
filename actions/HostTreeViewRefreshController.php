@@ -19,7 +19,7 @@ class HostTreeViewRefreshController extends CController {
             'filter_name' => 'string',
             'filter_custom_time' => 'in 1,0',
             'filter_show_counter' => 'in 1,0',
-            'page' => 'ge 1'
+            'page' => 'ge 1',
         ];
 
         return $this->validateInput($fields);
@@ -29,7 +29,7 @@ class HostTreeViewRefreshController extends CController {
         return $this->checkAccess(CRoleHelper::UI_MONITORING_HOSTS);
     }
 
-    protected function doAction() {
+    protected function doAction(): void {
         $hostGroups = HostTreeAPIService::getAllHostGroups();
         $hostGroupsById = [];
 
@@ -41,8 +41,9 @@ class HostTreeViewRefreshController extends CController {
         $filteredHostGroups = $this->filterHostGroupsByIds($hostGroups, $selectedGroupIds);
 
         $hostGroupIds = array_map(static fn(array $hostGroup): string => (string) $hostGroup['groupid'], $filteredHostGroups);
-        $hostGroupCounters = HostTreeAPIService::getHostCountsByHostGroupIds($hostGroupIds);
-        $hostGroupProblemCounters = HostTreeAPIService::getProblemCountsByHostGroupIdsBySeverity($hostGroupIds);
+        $hostData = HostTreeAPIService::getHostCountsAndProblemsByHostGroupIds($hostGroupIds);
+        $hostGroupCounters = $hostData['counts'];
+        $hostGroupProblemCounters = $hostData['problems'];
 
         $tree = [];
 
@@ -54,30 +55,28 @@ class HostTreeViewRefreshController extends CController {
                 continue;
             }
 
-            $groupName = sprintf(
-                '%s (%d)',
-                $hostGroup['name'],
-                $hostCount
-            );
+            $groupName = sprintf('%s (%d)', $hostGroup['name'], $hostCount);
 
             $tree[] = HostTreeNodeFactory::createNode(
                 $groupId,
                 $groupName,
                 0,
-                $hostCount > 0,
+                true,
                 true,
                 false,
-                $hostGroupProblemCounters[$groupId] ?? []
+                $hostGroupProblemCounters[$groupId] ?? [],
+                null,
+                null,
+                [],
+                'group'
             );
         }
 
-        $this->setResponse(
-            new CControllerResponseData([
-                'status' => 'success',
-                'data' => $tree,
-                'severity_meta' => HostTreeNodeFactory::createSeverityMeta()
-                ])
-        );
+        $this->setResponse(new CControllerResponseData([
+            'status' => 'success',
+            'data' => $tree,
+            'severity_meta' => HostTreeNodeFactory::createSeverityMeta(),
+        ]));
     }
 
     private function filterHostGroupsByIds(array $hostGroups, array $selectedGroupIds): array {
@@ -101,11 +100,7 @@ class HostTreeViewRefreshController extends CController {
         return $filtered;
     }
 
-    private function sanitizeGroupIds($groupIds, array $hostGroupsById): array {
-        if (!is_array($groupIds)) {
-            return [];
-        }
-
+    private function sanitizeGroupIds(array $groupIds, array $hostGroupsById): array {
         $validateAgainstAvailableGroups = ($hostGroupsById !== []);
         $sanitizedGroupIds = [];
 

@@ -9,38 +9,31 @@ use CRoleHelper;
 use Modules\HostTree\Classes\HostTreeNodeFactory;
 use Modules\HostTree\Services\HostTreeAPIService;
 
-class HostTreeDataController extends CController
-{
-    protected function init(): void
-    {
+class HostTreeDataController extends CController {
+    protected function init(): void {
         $this->disableCsrfValidation();
     }
 
-    protected function checkInput(): bool
-    {
+    protected function checkInput(): bool {
         $fields = [
-            "hostgroup_id" => "string"
+            'hostgroup_id' => 'string',
         ];
 
         return $this->validateInput($fields);
     }
 
-    protected function checkPermissions(): bool
-    {
+    protected function checkPermissions(): bool {
         return $this->checkAccess(CRoleHelper::UI_MONITORING_HOSTS);
     }
 
-    protected function doAction()
-    {
+    protected function doAction(): void {
         $hostGroupIds = $this->parseHostGroupIds((string) $this->getInput('hostgroup_id', ''));
 
         if ($hostGroupIds === []) {
-            $this->setResponse(
-                new CControllerResponseData([
-                    'status' => 'ok',
-                    'data' => []
-                ])
-            );
+            $this->setResponse(new CControllerResponseData([
+                'status' => 'ok',
+                'data' => [],
+            ]));
 
             return;
         }
@@ -73,20 +66,20 @@ class HostTreeDataController extends CController
 
             ++$hgacc;
 
-            $isOtherGroup = ((string) $groupName === 'outros');
-            $groupId = $parentId.'_'.$hgacc;
+            $isOtherGroup = ((string) $groupName === HostTreeAPIService::OUTROS_BUCKET);
+            $groupId = $parentId . '_' . $hgacc;
             $children = [];
             $pacc = 1;
             $groupProblemCount = HostTreeNodeFactory::createEmptyProblemCounters();
 
             foreach ($hosts as $hostData) {
                 $sourceHostId = (string) $hostData['hostid'];
-                $hostProblemCount = $problemCountsByHostId[(string) $hostData['hostid']]
+                $hostProblemCount = $problemCountsByHostId[$sourceHostId]
                     ?? HostTreeNodeFactory::createEmptyProblemCounters();
 
                 if ($isOtherGroup) {
                     $infraNodes[] = HostTreeNodeFactory::createNode(
-                        $parentId.'_infra_'.$pacc++,
+                        $parentId . '_infra_' . $pacc++,
                         (string) $hostData['name'],
                         2,
                         false,
@@ -94,7 +87,9 @@ class HostTreeDataController extends CController
                         true,
                         $hostProblemCount,
                         $sourceHostId,
-                        CMenuPopupHelper::getHost($sourceHostId)
+                        CMenuPopupHelper::getHost($sourceHostId),
+                        [],
+                        'host'
                     );
                     ++$infraHostCount;
 
@@ -105,7 +100,7 @@ class HostTreeDataController extends CController
                     continue;
                 }
 
-                $hostId = $groupId.'_'.$pacc++;
+                $hostId = $groupId . '_' . $pacc++;
 
                 foreach ($hostProblemCount as $severity => $problemCount) {
                     $groupProblemCount[$severity] += $problemCount;
@@ -120,7 +115,9 @@ class HostTreeDataController extends CController
                     true,
                     $hostProblemCount,
                     $sourceHostId,
-                    CMenuPopupHelper::getHost($sourceHostId)
+                    CMenuPopupHelper::getHost($sourceHostId),
+                    [],
+                    'host'
                 );
             }
 
@@ -138,7 +135,8 @@ class HostTreeDataController extends CController
                 $groupProblemCount,
                 null,
                 null,
-                $children
+                $children,
+                'bucket'
             );
 
             $pointNodes[] = $groupNode;
@@ -153,7 +151,7 @@ class HostTreeDataController extends CController
             array_unshift(
                 $tree,
                 HostTreeNodeFactory::createNode(
-                    $parentId.'_pontos',
+                    $parentId . '_pontos',
                     sprintf('Pontos (%d)', $pointHostCount),
                     1,
                     true,
@@ -162,14 +160,15 @@ class HostTreeDataController extends CController
                     $pointProblemCount,
                     null,
                     null,
-                    $pointNodes
+                    $pointNodes,
+                    'pontos'
                 )
             );
         }
 
         if ($infraNodes !== []) {
             $tree[] = HostTreeNodeFactory::createNode(
-                $parentId.'_infra',
+                $parentId . '_infra',
                 sprintf('Infra (%d)', $infraHostCount),
                 1,
                 true,
@@ -178,29 +177,26 @@ class HostTreeDataController extends CController
                 $infraProblemCount,
                 null,
                 null,
-                $infraNodes
+                $infraNodes,
+                'infra'
             );
         }
 
-        $this->setResponse(
-            new CControllerResponseData([
-                'status' => 'ok',
-                'data' => $tree
-            ])
-        );
+        $this->setResponse(new CControllerResponseData([
+            'status' => 'ok',
+            'data' => $tree,
+        ]));
     }
 
-    private function parseHostGroupIds(string $hostGroupIds): array
-    {
+    private function parseHostGroupIds(string $hostGroupIds): array {
         if ($hostGroupIds === '') {
             return [];
         }
 
         $validatedHostGroupIds = [];
-        $hostGroupIds = explode(',', $hostGroupIds);
 
-        foreach ($hostGroupIds as $hostGroupId) {
-            $hostGroupId = trim((string) $hostGroupId);
+        foreach (explode(',', $hostGroupIds) as $hostGroupId) {
+            $hostGroupId = trim($hostGroupId);
 
             if (!ctype_digit($hostGroupId)) {
                 continue;

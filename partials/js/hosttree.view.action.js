@@ -11,10 +11,15 @@
     if (payload.profile_debug !== undefined) {
         console.debug('[hosttree] profile_debug', payload.profile_debug);
     }
-    const severityMeta = payload.severity_meta ?? {};
-    const severityOrder = Object.keys(severityMeta).sort((left, right) => Number(right) - Number(left));
+    let severityMeta = payload.severity_meta ?? {};
+    let severityOrder = Object.keys(severityMeta).sort((left, right) => Number(right) - Number(left));
     const nodeStateById = new Map();
     const POINT_BUCKET_PAGE_SIZE = 30;
+    const PONTOS_PAGE_SIZE = 20;
+    const selectedGroupIds = Array.isArray(payload.selected_group_ids)
+        ? payload.selected_group_ids.filter((groupId) => /^\d+$/.test(groupId))
+        : [];
+    let refreshInProgress = false;
     const table = document.querySelector('table#host_tree');
     const tableBody = table?.querySelector('tbody') ?? null;
     if (!table || !tableBody) {
@@ -22,9 +27,24 @@
     }
     const rootTableBody = tableBody;
     initTabFilter(payload.filter_options);
+    insertRefreshButton();
     renderInitialNodes(payload.nodes);
     table.addEventListener('click', async (event) => {
         const eventTarget = event.target;
+        const acknowledgeBucketButton = eventTarget?.closest('button[data-hosttree-acknowledge-bucket]');
+        if (acknowledgeBucketButton) {
+            event.preventDefault();
+            const nodeId = acknowledgeBucketButton.getAttribute('node_id');
+            if (!nodeId) {
+                return;
+            }
+            const nodeState = nodeStateById.get(nodeId);
+            if (!nodeState) {
+                return;
+            }
+            await acknowledgeBucketIncidents(nodeState, acknowledgeBucketButton);
+            return;
+        }
         const paginationButton = eventTarget?.closest('button[data-hosttree-page]');
         if (paginationButton) {
             event.preventDefault();
@@ -58,13 +78,17 @@
         if (!nodeState || !nodeState.data.can_expand) {
             return;
         }
+        setToggleLoading(toggleButton, true);
         try {
             await ensureChildrenLoaded(nodeState);
         }
         catch (error) {
             console.error('[hosttree] failed to load node', error);
+            showError('Erro ao carregar nós. Tente novamente.');
+            setToggleLoading(toggleButton, false);
             return;
         }
+        setToggleLoading(toggleButton, false);
         if (nodeState.childrenIds.length === 0) {
             disableToggleButton(toggleButton);
             return;
@@ -77,6 +101,55 @@
         collapseNode(nodeState);
         setToggleExpanded(toggleButton, false);
     });
+    function insertRefreshButton() {
+        const tableEl = table;
+        if (!tableEl.parentElement) {
+            return;
+        }
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '8px';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = 'Atualizar incidentes';
+        button.setAttribute('data-hosttree-refresh-incidents', '1');
+        button.addEventListener('click', async () => {
+            if (refreshInProgress) {
+                return;
+            }
+            refreshInProgress = true;
+            button.disabled = true;
+            button.textContent = 'Atualizando...';
+            try {
+                await refreshIncidents();
+            }
+            catch (error) {
+                console.error('[hosttree] failed to refresh incidents', error);
+                showError('Erro ao atualizar incidentes. Tente novamente.');
+            }
+            finally {
+                refreshInProgress = false;
+                button.disabled = false;
+                button.textContent = 'Atualizar incidentes';
+            }
+        });
+        wrapper.appendChild(button);
+        tableEl.parentElement.insertBefore(wrapper, tableEl);
+    }
+    function showError(message) {
+        const tableEl = table;
+        const existing = document.getElementById('hosttree-error-banner');
+        if (existing) {
+            existing.remove();
+        }
+        const banner = document.createElement('div');
+        banner.id = 'hosttree-error-banner';
+        banner.textContent = message;
+        banner.style.cssText = 'color:#a00;background:#fff0f0;border:1px solid #f5c6cb;padding:6px 10px;margin-bottom:8px;border-radius:3px;';
+        if (tableEl.parentElement) {
+            tableEl.parentElement.insertBefore(banner, tableEl);
+        }
+        setTimeout(() => banner.remove(), 5000);
+    }
     function initTabFilter(filterOptions) {
         if (!filterOptions) {
             return;
@@ -95,22 +168,21 @@
             rootTableBody.appendChild(nodeState.element);
         }
     }
-    function registerNodeTree(node, hidden, parentId = null, inPointsSubtree = false) {
+    function registerNodeTree(node, hidden, parentId = null) {
         const existingState = nodeStateById.get(node.id);
         if (existingState) {
             return existingState;
         }
-        const isPointsRoot = (node.level === 1 && /^Pontos\b/i.test(node.label));
-        const isInPointsSubtree = inPointsSubtree || isPointsRoot;
         const childIds = [];
         for (const childNode of node.children) {
-            const childState = registerNodeTree(childNode, true, node.id, isInPointsSubtree);
+            const childState = registerNodeTree(childNode, true, node.id);
             childIds.push(childState.data.id);
         }
         const stateData = {
             id: node.id,
             label: node.label,
             level: node.level,
+            type: node.type ?? 'group',
             can_expand: node.can_expand,
             needs_load: node.needs_load,
             popup: node.popup,
@@ -118,7 +190,7 @@
             menu_popup: node.menu_popup,
             problem_counts_by_severity: (childIds.length > 0)
                 ? aggregateProblemCountersByChildIds(childIds)
-                : node.problem_counts_by_severity
+                : node.problem_counts_by_severity,
         };
         const nodeState = {
             data: stateData,
@@ -127,8 +199,7 @@
             loaded: node.needs_load ? false : true,
             collapsed: true,
             parentId,
-            inPointsSubtree: isInPointsSubtree,
-            pagination: null
+            pagination: null,
         };
         if (childIds.length > 0) {
             nodeState.loaded = true;
@@ -141,7 +212,18 @@
                 totalPages: Math.ceil(childIds.length / POINT_BUCKET_PAGE_SIZE),
                 prevButton: null,
                 nextButton: null,
-                infoElement: null
+                infoElement: null,
+            };
+        }
+        if (isPontosNode(nodeState) && childIds.length > PONTOS_PAGE_SIZE) {
+            nodeState.pagination = {
+                page: 1,
+                pageSize: PONTOS_PAGE_SIZE,
+                total: childIds.length,
+                totalPages: Math.ceil(childIds.length / PONTOS_PAGE_SIZE),
+                prevButton: null,
+                nextButton: null,
+                infoElement: null,
             };
         }
         nodeStateById.set(node.id, nodeState);
@@ -160,12 +242,19 @@
     }
     function buildNameColumn(node) {
         const column = document.createElement('td');
-        column.appendChild(document.createTextNode('\u00a0'.repeat(Math.max(0, node.level * 6))));
+        column.style.paddingLeft = `${node.level * 24}px`;
         if (node.can_expand) {
             column.appendChild(buildToggleButton(node.id));
         }
         column.appendChild(document.createTextNode('\u00a0'));
         column.appendChild(buildLabelNode(node));
+        if (node.type === 'bucket') {
+            const ackBtn = buildBucketAcknowledgeButton(node.id);
+            if (!hasAnyProblems(node.problem_counts_by_severity)) {
+                ackBtn.style.display = 'none';
+            }
+            column.appendChild(ackBtn);
+        }
         return column;
     }
     function buildToggleButton(nodeId) {
@@ -182,7 +271,7 @@
         if (node.popup && node.menu_popup) {
             const link = document.createElement('a');
             link.textContent = node.label;
-            link.href = 'javascript:void(0)';
+            link.href = '#';
             link.classList.add(ui.link_action_class);
             link.setAttribute('role', 'button');
             link.setAttribute('aria-expanded', 'false');
@@ -194,10 +283,31 @@
         text.textContent = node.label;
         return text;
     }
+    function hasAnyProblems(problemCounts) {
+        return Object.values(problemCounts).some((v) => Number(v) > 0);
+    }
+    function syncBucketAcknowledgeButton(nodeState) {
+        const btn = nodeState.element.querySelector('button[data-hosttree-acknowledge-bucket]');
+        if (!btn) {
+            return;
+        }
+        btn.style.display = hasAnyProblems(nodeState.data.problem_counts_by_severity) ? '' : 'none';
+    }
+    function buildBucketAcknowledgeButton(nodeId) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('node_id', nodeId);
+        button.setAttribute('data-hosttree-acknowledge-bucket', '1');
+        button.textContent = '✔';
+        button.title = 'Reconhecer incidentes';
+        button.style.cssText = 'margin-left:6px;cursor:pointer;font-size:12px;padding:0 3px;vertical-align:middle;';
+        return button;
+    }
     function isPointBucketNode(nodeState) {
-        return nodeState.inPointsSubtree
-            && nodeState.data.level === 2
-            && nodeState.childrenIds.length > 0;
+        return nodeState.data.type === 'bucket' && nodeState.childrenIds.length > 0;
+    }
+    function isPontosNode(nodeState) {
+        return nodeState.data.type === 'pontos' && nodeState.childrenIds.length > 0;
     }
     function attachPaginationControls(nodeState) {
         if (!nodeState.pagination) {
@@ -278,7 +388,43 @@
                 continue;
             }
             const isVisible = (index >= start && index < end);
-            childState.element.classList.toggle(ui.display_none_class, !isVisible);
+            if (!isVisible) {
+                childState.element.classList.add(ui.display_none_class);
+                for (const desc of collectDescendants(childState)) {
+                    desc.element.classList.add(ui.display_none_class);
+                }
+            }
+            else {
+                childState.element.classList.remove(ui.display_none_class);
+                if (!childState.collapsed) {
+                    restoreDescendantVisibility(childState);
+                }
+            }
+        }
+    }
+    function restoreDescendantVisibility(nodeState) {
+        const pagination = nodeState.pagination;
+        const start = pagination ? (pagination.page - 1) * pagination.pageSize : 0;
+        const end = pagination ? start + pagination.pageSize : nodeState.childrenIds.length;
+        for (let index = 0; index < nodeState.childrenIds.length; index++) {
+            const childId = nodeState.childrenIds[index];
+            const childState = nodeStateById.get(childId);
+            if (!childState) {
+                continue;
+            }
+            const isVisible = !pagination || (index >= start && index < end);
+            if (!isVisible) {
+                childState.element.classList.add(ui.display_none_class);
+                for (const desc of collectDescendants(childState)) {
+                    desc.element.classList.add(ui.display_none_class);
+                }
+            }
+            else {
+                childState.element.classList.remove(ui.display_none_class);
+                if (!childState.collapsed) {
+                    restoreDescendantVisibility(childState);
+                }
+            }
         }
     }
     function buildProblemsColumn(node) {
@@ -355,9 +501,19 @@
         const currentProblemsColumn = nodeState.element.children.item(1);
         if (currentProblemsColumn) {
             nodeState.element.replaceChild(nextProblemsColumn, currentProblemsColumn);
-            return;
         }
-        nodeState.element.appendChild(nextProblemsColumn);
+        else {
+            nodeState.element.appendChild(nextProblemsColumn);
+        }
+        if (nodeState.data.type === 'bucket') {
+            syncBucketAcknowledgeButton(nodeState);
+        }
+    }
+    function refreshLabelText(nodeState) {
+        const labelEl = nodeState.element.querySelector('b, a.' + ui.link_action_class);
+        if (labelEl) {
+            labelEl.textContent = nodeState.data.label;
+        }
     }
     function recalculateNodeProblemCountersFromChildren(nodeState) {
         if (nodeState.childrenIds.length === 0) {
@@ -384,6 +540,171 @@
         params.set('filter_set', '1');
         return `zabbix.php?${params.toString()}`;
     }
+    async function refreshIncidents() {
+        const response = await fetchRefreshedTree();
+        const nextNodes = Array.isArray(response?.data) ? response.data : [];
+        if (response?.severity_meta) {
+            severityMeta = response.severity_meta;
+            severityOrder = Object.keys(severityMeta).sort((left, right) => Number(right) - Number(left));
+        }
+        const nextNodeIds = new Set(nextNodes.map((n) => n.id));
+        const existingRootIds = new Set([...nodeStateById.values()]
+            .filter((s) => s.parentId === null)
+            .map((s) => s.data.id));
+        const structureChanged = nextNodes.some((n) => !existingRootIds.has(n.id)) ||
+            [...existingRootIds].some((id) => !nextNodeIds.has(id));
+        if (structureChanged) {
+            renderInitialNodes(nextNodes);
+            return;
+        }
+        for (const node of nextNodes) {
+            const existingState = nodeStateById.get(node.id);
+            if (!existingState) {
+                continue;
+            }
+            existingState.data.problem_counts_by_severity = node.problem_counts_by_severity;
+            existingState.data.label = node.label;
+            refreshLabelText(existingState);
+            refreshProblemsColumn(existingState);
+        }
+    }
+    async function acknowledgeBucketIncidents(bucketState, button) {
+        const hostIds = bucketState.childrenIds
+            .map((id) => nodeStateById.get(id)?.data.problem_host_id)
+            .filter(Boolean);
+        if (hostIds.length === 0) {
+            return;
+        }
+        let message;
+        try {
+            message = await showAcknowledgeDialog(bucketState);
+        }
+        catch {
+            return;
+        }
+        if (button.disabled) {
+            return;
+        }
+        button.disabled = true;
+        const originalText = button.textContent ?? '';
+        button.textContent = '…';
+        try {
+            const result = await fetchAcknowledgeBucket(hostIds, message);
+            if (result?.status !== 'ok') {
+                throw new Error(result?.message ?? 'Unknown error');
+            }
+            const groupState = findAncestorByType(bucketState, 'group');
+            if (groupState) {
+                const freshNodes = await fetchChildNodes(groupState.data.id);
+                applyFreshNodeData(freshNodes);
+                recalculateNodeProblemCountersFromChildren(groupState);
+            }
+        }
+        catch (error) {
+            console.error('[hosttree] failed to acknowledge bucket incidents', error);
+            showError('Erro ao reconhecer incidentes. Tente novamente.');
+        }
+        finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+    function showAcknowledgeDialog(bucketState) {
+        return new Promise((resolve, reject) => {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+            const dialog = document.createElement('div');
+            dialog.style.cssText = 'background:#fff;border:1px solid #ccc;border-radius:4px;padding:20px;min-width:380px;max-width:500px;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+            const title = document.createElement('h3');
+            title.textContent = `Reconhecer incidentes — ${bucketState.data.label}`;
+            title.style.cssText = 'margin:0 0 12px;font-size:14px;';
+            const label = document.createElement('label');
+            label.textContent = 'Descrição:';
+            label.style.cssText = 'display:block;margin-bottom:4px;font-size:13px;';
+            const textarea = document.createElement('textarea');
+            textarea.rows = 3;
+            textarea.style.cssText = 'width:100%;box-sizing:border-box;font-size:13px;padding:6px;border:1px solid #aaa;border-radius:3px;resize:vertical;';
+            textarea.placeholder = 'Opcional';
+            const buttons = document.createElement('div');
+            buttons.style.cssText = 'margin-top:14px;display:flex;gap:8px;justify-content:flex-end;';
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.textContent = 'Cancelar';
+            const confirmBtn = document.createElement('button');
+            confirmBtn.type = 'button';
+            confirmBtn.textContent = 'Reconhecer';
+            confirmBtn.style.fontWeight = 'bold';
+            const close = (confirmed) => {
+                overlay.remove();
+                if (confirmed) {
+                    resolve(textarea.value.trim());
+                }
+                else {
+                    reject(new Error('cancelled'));
+                }
+            };
+            cancelBtn.addEventListener('click', () => close(false));
+            confirmBtn.addEventListener('click', () => close(true));
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(false); });
+            buttons.appendChild(cancelBtn);
+            buttons.appendChild(confirmBtn);
+            dialog.appendChild(title);
+            dialog.appendChild(label);
+            dialog.appendChild(textarea);
+            dialog.appendChild(buttons);
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+            textarea.focus();
+        });
+    }
+    function fetchAcknowledgeBucket(hostIds, message) {
+        return new Promise((resolve, reject) => {
+            const data = { 'host_ids[]': hostIds };
+            if (message) {
+                data['message'] = message;
+            }
+            $.ajax({
+                url: safeBootstrap.endpoints.hosttree_acknowledge,
+                type: 'post',
+                dataType: 'json',
+                data,
+            })
+                .done((response) => {
+                resolve(response);
+            })
+                .fail((_jqXHR, textStatus, errorThrown) => {
+                reject(new Error(String(errorThrown ?? textStatus)));
+            });
+        });
+    }
+    function findAncestorByType(nodeState, type) {
+        let parentId = nodeState.parentId;
+        while (parentId) {
+            const parentState = nodeStateById.get(parentId);
+            if (!parentState) {
+                break;
+            }
+            if (parentState.data.type === type) {
+                return parentState;
+            }
+            parentId = parentState.parentId;
+        }
+        return null;
+    }
+    function applyFreshNodeData(freshNodes) {
+        for (const node of freshNodes) {
+            const existingState = nodeStateById.get(node.id);
+            if (existingState) {
+                existingState.data.problem_counts_by_severity = node.problem_counts_by_severity;
+                existingState.data.label = node.label;
+                refreshLabelText(existingState);
+                refreshProblemsColumn(existingState);
+            }
+            if (node.children.length > 0) {
+                applyFreshNodeData(node.children);
+            }
+        }
+    }
     async function ensureChildrenLoaded(nodeState) {
         if (nodeState.loaded || !nodeState.data.needs_load) {
             return;
@@ -391,7 +712,7 @@
         const fetchedNodes = await fetchChildNodes(nodeState.data.id);
         const childIds = [];
         for (const childNode of fetchedNodes) {
-            const childState = registerNodeTree(childNode, true);
+            const childState = registerNodeTree(childNode, true, nodeState.data.id);
             childIds.push(childState.data.id);
         }
         nodeState.childrenIds = childIds;
@@ -399,12 +720,33 @@
         recalculateNodeProblemCountersFromChildren(nodeState);
         refreshAncestorProblemCounters(nodeState);
     }
+    function fetchRefreshedTree() {
+        return new Promise((resolve, reject) => {
+            const body = {};
+            if (selectedGroupIds.length > 0) {
+                body['groupids[]'] = selectedGroupIds;
+            }
+            $.ajax({
+                url: safeBootstrap.endpoints.hosttree_view_refresh,
+                type: 'post',
+                dataType: 'json',
+                data: body,
+            })
+                .done((response) => {
+                resolve(response);
+            })
+                .fail((_jqXHR, textStatus, errorThrown) => {
+                reject(new Error(String(errorThrown ?? textStatus)));
+            });
+        });
+    }
     function fetchChildNodes(nodeId) {
         return new Promise((resolve, reject) => {
             $.ajax({
-                url: `${safeBootstrap.endpoints.hosttree_data}&hostgroup_id=${encodeURIComponent(nodeId)}`,
+                url: safeBootstrap.endpoints.hosttree_data,
                 type: 'post',
-                dataType: 'json'
+                dataType: 'json',
+                data: { hostgroup_id: nodeId },
             })
                 .done((response) => {
                 resolve(Array.isArray(response?.data) ? response.data : []);
@@ -444,7 +786,9 @@
         const descendants = collectDescendants(nodeState);
         let anchor = nodeState.element;
         for (const descendant of descendants) {
-            anchor.insertAdjacentElement('afterend', descendant.element);
+            if (!descendant.element.parentElement) {
+                anchor.insertAdjacentElement('afterend', descendant.element);
+            }
             anchor = descendant.element;
         }
     }
@@ -472,6 +816,21 @@
         }
         icon.classList.toggle(ui.arrow_down_class, expanded);
         icon.classList.toggle(ui.arrow_right_class, !expanded);
+    }
+    function setToggleLoading(toggleButton, loading) {
+        toggleButton.disabled = loading;
+        const icon = toggleButton.querySelector('span');
+        if (!icon) {
+            return;
+        }
+        if (loading) {
+            icon.classList.remove(ui.arrow_right_class, ui.arrow_down_class);
+            icon.style.opacity = '0.4';
+        }
+        else {
+            icon.style.opacity = '';
+            icon.classList.add(ui.arrow_right_class);
+        }
     }
     function disableToggleButton(toggleButton) {
         toggleButton.setAttribute('disabled', 'disabled');

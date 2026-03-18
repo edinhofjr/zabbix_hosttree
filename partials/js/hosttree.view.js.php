@@ -18,7 +18,9 @@ $bootstrap = [
         'link_action_class' => ZBX_STYLE_LINK_ACTION
     ],
     'endpoints' => [
-        'hosttree_data' => 'zabbix.php?action=hosttree.data'
+        'hosttree_data' => 'zabbix.php?action=hosttree.data',
+        'hosttree_view_refresh' => 'zabbix.php?action=hosttree.view.refresh',
+        'hosttree_acknowledge' => 'zabbix.php?action=hosttree.acknowledge'
     ]
 ];
 ?>

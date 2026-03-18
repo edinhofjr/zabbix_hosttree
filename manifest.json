@@ -14,6 +14,16 @@
             "class": "HostTreeDataController",
             "view": "hosttree.data",
             "layout": "layout.json"
+        },
+        "hosttree.view.refresh": {
+            "class": "HostTreeViewRefreshController",
+            "view": "hosttree.data",
+            "layout": "layout.json"
+        },
+        "hosttree.acknowledge": {
+            "class": "HostTreeAcknowledgeController",
+            "view": "hosttree.data",
+            "layout": "layout.json"
         }
     }
 }

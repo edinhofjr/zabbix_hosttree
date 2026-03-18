@@ -15,19 +15,21 @@ class HostTreeNodeFactory {
         array $problemCountsBySeverity = [],
         ?string $problemHostId = null,
         ?array $menuPopup = null,
-        array $children = []
+        array $children = [],
+        string $type = 'group'
     ): array {
         return [
             'id' => $id,
             'label' => $label,
             'level' => $level,
+            'type' => $type,
             'can_expand' => $canExpand,
             'needs_load' => $needsLoad,
             'popup' => $popup,
             'problem_host_id' => $problemHostId,
             'menu_popup' => $menuPopup,
             'problem_counts_by_severity' => $problemCountsBySeverity,
-            'children' => $children
+            'children' => $children,
         ];
     }
 
@@ -37,7 +39,7 @@ class HostTreeNodeFactory {
         for ($severity = TRIGGER_SEVERITY_COUNT - 1; $severity >= TRIGGER_SEVERITY_NOT_CLASSIFIED; $severity--) {
             $severityMeta[$severity] = [
                 'name' => CSeverityHelper::getName($severity),
-                'class' => CSeverityHelper::getStatusStyle($severity)
+                'class' => CSeverityHelper::getStatusStyle($severity),
             ];
         }
 
