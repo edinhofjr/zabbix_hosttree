@@ -163,4 +163,4 @@ To acknowledge problems for a group of hosts, expand the tree to the host level,
 
 ## Author
 
-**edinhofjr** — v1.0.0
+**edinhofjr** — v1.0.0# Host-Tree-for-Zabbix
