@@ -8,9 +8,6 @@
     const safeBootstrap = bootstrap;
     const payload = bootstrap.payload;
     const ui = bootstrap.ui;
-    if (payload.profile_debug !== undefined) {
-        console.debug('[hosttree] profile_debug', payload.profile_debug);
-    }
     let severityMeta = payload.severity_meta ?? {};
     let severityOrder = Object.keys(severityMeta).sort((left, right) => Number(right) - Number(left));
     const nodeStateById = new Map();
@@ -29,6 +26,16 @@
     initTabFilter(payload.filter_options);
     insertRefreshButton();
     renderInitialNodes(payload.nodes);
+    // Required by menupopup.js when clicking "Host" in the configuration section of the context menu.
+    window.view = {
+        editHost(hostid) {
+            PopUp('popup.host.edit', { hostid }, {
+                dialogueid: 'host_edit',
+                dialogue_class: 'modal-popup-large',
+                prevent_navigation: true,
+            });
+        },
+    };
     table.addEventListener('click', async (event) => {
         const eventTarget = event.target;
         const acknowledgeBucketButton = eventTarget?.closest('button[data-hosttree-acknowledge-bucket]');
@@ -191,6 +198,8 @@
             problem_counts_by_severity: (childIds.length > 0)
                 ? aggregateProblemCountersByChildIds(childIds)
                 : node.problem_counts_by_severity,
+            description: node.description ?? null,
+            interface: node.interface ?? null,
         };
         const nodeState = {
             data: stateData,
@@ -237,8 +246,24 @@
             row.classList.add(ui.display_none_class);
         }
         row.appendChild(buildNameColumn(node));
+        row.appendChild(buildDescriptionColumn(node));
+        row.appendChild(buildInterfaceColumn(node));
         row.appendChild(buildProblemsColumn(node));
         return row;
+    }
+    function buildDescriptionColumn(node) {
+        const column = document.createElement('td');
+        if (node.type === 'host' && node.description) {
+            column.textContent = node.description;
+        }
+        return column;
+    }
+    function buildInterfaceColumn(node) {
+        const column = document.createElement('td');
+        if (node.type === 'host' && node.interface) {
+            column.textContent = node.interface;
+        }
+        return column;
     }
     function buildNameColumn(node) {
         const column = document.createElement('td');
@@ -271,7 +296,7 @@
         if (node.popup && node.menu_popup) {
             const link = document.createElement('a');
             link.textContent = node.label;
-            link.href = '#';
+            link.href = 'javascript:void(0)';
             link.classList.add(ui.link_action_class);
             link.setAttribute('role', 'button');
             link.setAttribute('aria-expanded', 'false');
@@ -498,7 +523,7 @@
     }
     function refreshProblemsColumn(nodeState) {
         const nextProblemsColumn = buildProblemsColumn(nodeState.data);
-        const currentProblemsColumn = nodeState.element.children.item(1);
+        const currentProblemsColumn = nodeState.element.children.item(3);
         if (currentProblemsColumn) {
             nodeState.element.replaceChild(nextProblemsColumn, currentProblemsColumn);
         }
@@ -571,7 +596,7 @@
     async function acknowledgeBucketIncidents(bucketState, button) {
         const hostIds = bucketState.childrenIds
             .map((id) => nodeStateById.get(id)?.data.problem_host_id)
-            .filter(Boolean);
+            .filter((id) => !!id);
         if (hostIds.length === 0) {
             return;
         }
@@ -645,7 +670,8 @@
             };
             cancelBtn.addEventListener('click', () => close(false));
             confirmBtn.addEventListener('click', () => close(true));
-            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(false); });
+            overlay.addEventListener('click', (e) => { if (e.target === overlay)
+                close(false); });
             buttons.appendChild(cancelBtn);
             buttons.appendChild(confirmBtn);
             dialog.appendChild(title);

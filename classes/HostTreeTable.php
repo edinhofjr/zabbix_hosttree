@@ -10,7 +10,9 @@ class HostTreeTable extends CTableInfo {
     {
         parent::__construct();
         $this->setHeader([
-            (new CColHeader(_('Name'))),
+            (new CColHeader(_('Host'))),
+            (new CColHeader(_('Description'))),
+            (new CColHeader(_('Interface'))),
             (new CColHeader(_('Problems')))
         ]);
 

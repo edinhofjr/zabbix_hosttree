@@ -17,6 +17,8 @@ type HostTreeNodePayload = {
     menu_popup: Record<string, unknown> | null;
     problem_counts_by_severity: Record<string, number | string>;
     children: HostTreeNodePayload[];
+    description: string | null;
+    interface: string | null;
 };
 
 type HostTreeViewPayload = {
@@ -85,6 +87,8 @@ declare class CTabFilter {
     public constructor(element: Element, options: unknown);
 }
 
+declare function PopUp(action: string, parameters: Record<string, unknown>, options: Record<string, unknown>): unknown;
+
 (() => {
     const hostTreeWindow = window as Window & {
         hosttreeBootstrap?: HostTreeBootstrap;
@@ -98,10 +102,6 @@ declare class CTabFilter {
     const safeBootstrap: HostTreeBootstrap = bootstrap;
     const payload = bootstrap.payload;
     const ui = bootstrap.ui;
-
-    if (payload.profile_debug !== undefined) {
-        console.debug('[hosttree] profile_debug', payload.profile_debug);
-    }
 
     let severityMeta = payload.severity_meta ?? {};
     let severityOrder = Object.keys(severityMeta).sort((left, right) => Number(right) - Number(left));
@@ -125,6 +125,17 @@ declare class CTabFilter {
     initTabFilter(payload.filter_options);
     insertRefreshButton();
     renderInitialNodes(payload.nodes);
+
+    // Required by menupopup.js when clicking "Host" in the configuration section of the context menu.
+    (window as Window & { view?: { editHost: (hostid: string) => void } }).view = {
+        editHost(hostid: string): void {
+            PopUp('popup.host.edit', { hostid }, {
+                dialogueid: 'host_edit',
+                dialogue_class: 'modal-popup-large',
+                prevent_navigation: true,
+            });
+        },
+    };
 
     table.addEventListener('click', async (event) => {
         const eventTarget = event.target as HTMLElement | null;
@@ -338,6 +349,8 @@ declare class CTabFilter {
             problem_counts_by_severity: (childIds.length > 0)
                 ? aggregateProblemCountersByChildIds(childIds)
                 : node.problem_counts_by_severity,
+            description: node.description ?? null,
+            interface: node.interface ?? null,
         };
 
         const nodeState: HostTreeNodeState = {
@@ -393,9 +406,31 @@ declare class CTabFilter {
         }
 
         row.appendChild(buildNameColumn(node));
+        row.appendChild(buildDescriptionColumn(node));
+        row.appendChild(buildInterfaceColumn(node));
         row.appendChild(buildProblemsColumn(node));
 
         return row;
+    }
+
+    function buildDescriptionColumn(node: Omit<HostTreeNodePayload, 'children'>): HTMLTableCellElement {
+        const column = document.createElement('td');
+
+        if (node.type === 'host' && node.description) {
+            column.textContent = node.description;
+        }
+
+        return column;
+    }
+
+    function buildInterfaceColumn(node: Omit<HostTreeNodePayload, 'children'>): HTMLTableCellElement {
+        const column = document.createElement('td');
+
+        if (node.type === 'host' && node.interface) {
+            column.textContent = node.interface;
+        }
+
+        return column;
     }
 
     function buildNameColumn(node: Omit<HostTreeNodePayload, 'children'>): HTMLTableCellElement {
@@ -437,7 +472,7 @@ declare class CTabFilter {
         if (node.popup && node.menu_popup) {
             const link = document.createElement('a');
             link.textContent = node.label;
-            link.href = '#';
+            link.href = 'javascript:void(0)';
             link.classList.add(ui.link_action_class);
             link.setAttribute('role', 'button');
             link.setAttribute('aria-expanded', 'false');
@@ -730,7 +765,7 @@ declare class CTabFilter {
 
     function refreshProblemsColumn(nodeState: HostTreeNodeState): void {
         const nextProblemsColumn = buildProblemsColumn(nodeState.data);
-        const currentProblemsColumn = nodeState.element.children.item(1);
+        const currentProblemsColumn = nodeState.element.children.item(3);
 
         if (currentProblemsColumn) {
             nodeState.element.replaceChild(nextProblemsColumn, currentProblemsColumn);

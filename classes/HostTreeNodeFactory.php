@@ -16,7 +16,9 @@ class HostTreeNodeFactory {
         ?string $problemHostId = null,
         ?array $menuPopup = null,
         array $children = [],
-        string $type = 'group'
+        string $type = 'group',
+        ?string $description = null,
+        ?string $interface = null
     ): array {
         return [
             'id' => $id,
@@ -30,6 +32,8 @@ class HostTreeNodeFactory {
             'menu_popup' => $menuPopup,
             'problem_counts_by_severity' => $problemCountsBySeverity,
             'children' => $children,
+            'description' => $description,
+            'interface' => $interface,
         ];
     }
 

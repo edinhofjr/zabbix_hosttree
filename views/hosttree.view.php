@@ -4,6 +4,9 @@
  * @var Modules\HostTree\Classes\Dto\HostTreeControllerResponse $data
  */
 
+$this->addJsFile('layout.mode.js');
+$this->addJsFile('items.js');
+
 $this->setLayoutMode(ZBX_LAYOUT_NORMAL);
 $this->addJsFile('class.tabfilter.js');
 $this->addJsFile('class.tabfilteritem.js');

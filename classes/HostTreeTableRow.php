@@ -21,7 +21,9 @@ class HostTreeTableRow extends CRow {
         string $id,
         bool $popup = false,
         array $problemCountsBySeverity = [],
-        ?string $problemsHostId = null
+        ?string $problemsHostId = null,
+        ?string $description = null,
+        ?string $interface = null
     ) {
         parent::__construct();
 
@@ -45,6 +47,14 @@ class HostTreeTableRow extends CRow {
                 ->addItem($popup ? 
                     (new CLinkAction($name))->setMenuPopup(CMenuPopupHelper::getHost($id)) : 
                 bold($name))
+        );
+
+        $this->addItem(
+            (new CCol($description !== null ? $description : ''))
+        );
+
+        $this->addItem(
+            (new CCol($interface !== null ? $interface : ''))
         );
 
         $problemsCol = (new CCol())->addClass(ZBX_STYLE_NOWRAP);

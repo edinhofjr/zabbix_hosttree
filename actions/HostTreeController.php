@@ -8,6 +8,7 @@ use CControllerResponseData;
 use CRoleHelper;
 use Modules\HostTree\Classes\CProfileExample;
 use Modules\HostTree\Classes\HostTreeNodeFactory;
+use Modules\HostTree\Services\HostGroupCache;
 use Modules\HostTree\Services\HostTreeAPIService;
 
 class HostTreeController extends CController {
@@ -30,7 +31,7 @@ class HostTreeController extends CController {
     }
 
     protected function doAction(): void {
-        $hostGroups = HostTreeAPIService::getAllHostGroups();
+        $hostGroups = HostGroupCache::get() ?? HostGroupCache::set(HostTreeAPIService::getAllHostGroups());
         $profileState = CProfileExample::getState();
         $selectedGroupIds = $profileState['groupids'];
 
@@ -39,15 +40,12 @@ class HostTreeController extends CController {
             $profileState = CProfileExample::getState();
             $selectedGroupIds = $profileState['groupids'];
         }
+        
         elseif ($this->hasInput('groupids')) {
             $selectedGroupIds = $this->sanitizeGroupIds($this->getInput('groupids', []));
             $profileState['groupids'] = $selectedGroupIds;
             CProfileExample::saveState($profileState);
         }
-
-        $profileDebug = $this->hasInput('debug_profile')
-            ? CProfileExample::getDebugData($this->getInputAll())
-            : null;
 
         $filteredHostGroups = $this->filterHostGroupsByIds($hostGroups, $selectedGroupIds);
         $groupsMultiselect = $this->buildGroupsMultiselectData($hostGroups, $selectedGroupIds);
@@ -120,10 +118,6 @@ class HostTreeController extends CController {
                 'csrf_token' => CCsrfTokenHelper::get('tabfilter'),
             ],
         ];
-
-        if ($profileDebug !== null) {
-            $responseData['profile_debug'] = $profileDebug;
-        }
 
         $this->setResponse(new CControllerResponseData($responseData));
     }

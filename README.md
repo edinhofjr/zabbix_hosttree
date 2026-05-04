@@ -86,8 +86,14 @@ hosttree_v2/
 │   ├── HostTreeTableRow.php            # HTML table row component
 │   ├── HTMLHelper.php                  # HTML rendering utilities
 │   ├── CProfileExample.php             # User preference persistence
-│   ├── dto/                            # Data Transfer Objects
-│   └── interfaces/                     # Interface definitions
+│   ├── HostGroup.php                   # Host group value object
+│   ├── JsonLogger.php                  # JSON-based debug logger
+│   ├── Mapper.php                      # Data mapping utilities
+│   ├── TsImportHelper.php              # TypeScript import helper
+│   ├── dto/
+│   │   └── HostTreeControllerResponse.php  # DTO for controller responses
+│   └── interfaces/
+│       └── JsonDecoder.php             # Interface for JSON decoding
 │
 ├── partials/
 │   ├── module.monitoring.hosttree.view.html.php  # Main content partial
@@ -97,7 +103,8 @@ hosttree_v2/
 │   └── ts/hosttree.view.action.ts                # TypeScript source
 │
 ├── views/
-│   └── hosttree.view.php               # Main view template
+│   ├── hosttree.view.php               # Main view template
+│   └── hosttree.data.php               # AJAX data view template
 │
 └── docs/
     └── fluxo-completo-modulo-hosttree.svg  # Architecture flow diagram

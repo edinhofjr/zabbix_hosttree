@@ -166,11 +166,29 @@ class HostTreeAPIService {
 
     public static function getAllHostsByHostGroupId(array $hostGroupId): array {
         return API::Host()->get([
-            'output' => ['hostid', 'name'],
+            'output' => ['hostid', 'name', 'description'],
             'selectTags' => ['tag', 'value'],
+            'selectInterfaces' => ['ip', 'dns', 'main', 'useip'],
             'groupids' => $hostGroupId,
             'sortfield' => 'name',
         ]);
+    }
+
+    public static function extractMainInterfaceAddress(array $interfaces): ?string {
+        foreach ($interfaces as $interface) {
+            if ((int) $interface['main'] === 1) {
+                $address = ((int) $interface['useip'] === 1) ? $interface['ip'] : $interface['dns'];
+                return ($address !== '') ? $address : null;
+            }
+        }
+
+        if (!empty($interfaces)) {
+            $first = $interfaces[0];
+            $address = ((int) $first['useip'] === 1) ? $first['ip'] : $first['dns'];
+            return ($address !== '') ? $address : null;
+        }
+
+        return null;
     }
 
     private static function getPontoBucket(array $tags): ?string {

@@ -89,7 +89,9 @@ class HostTreeDataController extends CController {
                         $sourceHostId,
                         CMenuPopupHelper::getHost($sourceHostId),
                         [],
-                        'host'
+                        'host',
+                        ($hostData['description'] !== '') ? (string) $hostData['description'] : null,
+                        HostTreeAPIService::extractMainInterfaceAddress($hostData['interfaces'] ?? [])
                     );
                     ++$infraHostCount;
 
@@ -117,7 +119,9 @@ class HostTreeDataController extends CController {
                     $sourceHostId,
                     CMenuPopupHelper::getHost($sourceHostId),
                     [],
-                    'host'
+                    'host',
+                    ($hostData['description'] !== '') ? (string) $hostData['description'] : null,
+                    HostTreeAPIService::extractMainInterfaceAddress($hostData['interfaces'] ?? [])
                 );
             }
 
